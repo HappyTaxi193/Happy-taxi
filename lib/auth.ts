@@ -89,7 +89,7 @@ export async function createUser(phone: string, password: string, role: "user" |
       .insert([
         {
           phone,
-          password: await hashPassword(password), // Make sure to hash the password
+          password_hash: await hashPassword(password), // Make sure to hash the password
           role,
           created_at: new Date().toISOString()
         }
