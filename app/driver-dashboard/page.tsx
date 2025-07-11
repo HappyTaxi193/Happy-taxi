@@ -64,6 +64,8 @@ export default function DriverDashboard() {
   const [reviewText, setReviewText] = useState("")
   const [rating, setRating] = useState(5)
   const [sosActive, setSosActive] = useState(false)
+  const [totalEarnings, setTotalEarnings] = useState(0)
+  const [rideEarnings, setRideEarnings] = useState<Record<string, number>>({})
   const [newRide, setNewRide] = useState({
     from_location: "",
     to_location: "",
@@ -116,6 +118,54 @@ export default function DriverDashboard() {
       }
       setRides(ridesData || [])
 
+      // Fetch bookings for earnings calculation - FIXED VERSION
+      const { data: bookingsData, error: bookingsError } = await supabase
+        .from("bookings")
+        .select(`
+          *,
+          rides!inner(
+            id,
+            driver_id,
+            price,
+            status
+          )
+        `)
+        .eq("rides.driver_id", driverData.id)
+        .in("status", ["confirmed", "completed"]) // Only confirmed and completed bookings
+
+      if (bookingsError) {
+        console.error("Bookings error:", bookingsError)
+      } else {
+        // Calculate total earnings from confirmed/completed bookings on NON-CANCELLED rides only
+        const earnings = (bookingsData || []).reduce((total, booking) => {
+          // Only add earnings if the ride is not cancelled
+          if (booking.rides.status !== "cancelled") {
+            return total + (booking.seats_booked * booking.rides.price)
+          }
+          return total
+        }, 0)
+        setTotalEarnings(earnings)
+
+        // Calculate earnings per ride - FIXED VERSION
+        const rideEarningsMap: Record<string, number> = {}
+        
+        // Initialize all rides with 0 earnings first
+        ;(ridesData || []).forEach(ride => {
+          rideEarningsMap[ride.id] = 0
+        })
+        
+        // Add earnings only for NON-CANCELLED rides
+        ;(bookingsData || []).forEach(booking => {
+          const rideId = booking.rides.id
+          // Only add earnings if the ride is not cancelled
+          if (booking.rides.status !== "cancelled") {
+            rideEarningsMap[rideId] += booking.seats_booked * booking.rides.price
+          }
+        })
+        
+        setRideEarnings(rideEarningsMap)
+      }
+
       setBookings([])
     } catch (error) {
       console.error("Error fetching driver data:", error)
@@ -165,12 +215,25 @@ export default function DriverDashboard() {
     }
 
     try {
-      const { error } = await supabase.from("rides").update({ status: "cancelled" }).eq("id", rideId)
+      // Cancel the ride
+      const { error: rideError } = await supabase.from("rides").update({ status: "cancelled" }).eq("id", rideId)
 
-      if (error) throw error
+      if (rideError) throw rideError
 
+      // Also cancel all bookings for this ride
+      const { error: bookingError } = await supabase
+        .from("bookings")
+        .update({ status: "cancelled" })
+        .eq("ride_id", rideId)
+
+      if (bookingError) {
+        console.error("Error cancelling bookings:", bookingError)
+        // Continue anyway as the ride is already cancelled
+      }
+
+      // Refresh data to update earnings and ride status
       fetchDriverData(user.id)
-      alert("Ride cancelled successfully!")
+      alert("Ride cancelled successfully! All associated bookings have been cancelled.")
     } catch (error) {
       console.error("Error cancelling ride:", error)
       alert("Failed to cancel ride. Please try again.")
@@ -350,9 +413,7 @@ export default function DriverDashboard() {
                 <IndianRupee className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
-                  ₹{rides.reduce((sum, ride) => sum + (ride.total_seats - ride.available_seats) * ride.price, 0)}
-                </div>
+                <div className="text-2xl font-bold">₹{totalEarnings}</div>
               </CardContent>
             </Card>
             <Card>
@@ -525,8 +586,14 @@ export default function DriverDashboard() {
                               <strong>Booked Seats:</strong> {ride.total_seats - ride.available_seats}
                             </p>
                             <p>
-                              <strong>Earnings:</strong> ₹{(ride.total_seats - ride.available_seats) * ride.price}
+                              <strong>Earnings:</strong>{" "}
+                              ₹{ride.status === "cancelled" ? 0 : (rideEarnings[ride.id] || 0)}
                             </p>
+                            {ride.status === "cancelled" && (
+                              <p className="text-red-600 text-xs mt-1">
+                                This ride was cancelled - no earnings from this trip
+                              </p>
+                            )}
                             <div className="flex space-x-2 mt-3">
                               {ride.status === "active" && (
                                 <Button size="sm" variant="destructive" onClick={() => handleCancelRide(ride.id)}>
