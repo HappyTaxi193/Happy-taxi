@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Upload, User, Car, AlertCircle } from "lucide-react"
+import { Upload, User, Car, AlertCircle, X, Check } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
@@ -22,6 +22,7 @@ export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true)
   const [role, setRole] = useState<"user" | "driver">("user")
   const [loading, setLoading] = useState(false)
+  const [uploadingFiles, setUploadingFiles] = useState(false)
   const [phone, setPhone] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -52,6 +53,15 @@ export default function AuthPage() {
   const clearMessages = () => {
     setError("")
     setSuccess("")
+  }
+
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.readAsDataURL(file)
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = error => reject(error)
+    })
   }
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -118,25 +128,54 @@ export default function AuthPage() {
       }
 
       if (role === "driver" && result.user) {
-        const { error: driverError } = await supabase.from("drivers").insert([
-          {
-            user_id: result.user.id,
-            primary_phone: driverData.primaryPhone,
-            secondary_phone: driverData.secondaryPhone || null,
-            address: driverData.address,
-            aadhaar_number: driverData.aadhaarNumber,
-            vehicle_number: driverData.vehicleNumber,
-            car_model: driverData.carModel,
-            car_make: driverData.carMake,
-            driving_license_url: "placeholder-license-url",
-            photograph_url: "placeholder-photo-url",
-          },
-        ])
+        setUploadingFiles(true)
+        
+        try {
+          // Convert files to base64
+          let photographBase64 = null
+          let drivingLicenseBase64 = null
 
-        if (driverError) throw driverError
+          if (driverData.photograph) {
+            console.log('Converting photograph to base64...')
+            photographBase64 = await fileToBase64(driverData.photograph)
+          }
 
-        setSuccess("Driver registration successful! Please wait for admin approval.")
-        setTimeout(() => router.push("/"), 2000)
+          if (driverData.drivingLicense) {
+            console.log('Converting driving license to base64...')
+            drivingLicenseBase64 = await fileToBase64(driverData.drivingLicense)
+          }
+
+          // Insert driver data with base64 files
+          const { error: driverError } = await supabase.from("drivers").insert([
+            {
+              user_id: result.user.id,
+              primary_phone: driverData.primaryPhone,
+              secondary_phone: driverData.secondaryPhone || null,
+              address: driverData.address,
+              aadhaar_number: driverData.aadhaarNumber,
+              vehicle_number: driverData.vehicleNumber,
+              car_model: driverData.carModel,
+              car_make: driverData.carMake,
+              driving_license_url: drivingLicenseBase64, // Store as base64
+              photograph_url: photographBase64, // Store as base64
+            },
+          ])
+
+          if (driverError) {
+            console.error('Driver data insertion error:', driverError)
+            throw new Error(`Failed to save driver data: ${driverError.message}`)
+          }
+
+          setSuccess("Driver registration successful! Please wait for admin approval.")
+          setTimeout(() => router.push("/"), 2000)
+        } catch (error) {
+          console.error('File processing error:', error)
+          // Clean up user if driver data insertion failed
+          if (result.user) {
+            await supabase.from("users").delete().eq("id", result.user.id)
+          }
+          throw error
+        }
       } else {
         localStorage.setItem("user", JSON.stringify(result.user))
         setSuccess("Account created successfully! Redirecting...")
@@ -152,42 +191,22 @@ export default function AuthPage() {
           errorMessage.includes("already registered") || 
           errorMessage.includes("duplicate")) {
         setError("This phone number is already taken. Please use a different number or try logging in.")
+      } else if (errorMessage.includes("upload") || errorMessage.includes("storage")) {
+        setError("Failed to upload documents. Please try again.")
       } else {
         setError(errorMessage)
       }
     } finally {
       setLoading(false)
+      setUploadingFiles(false)
     }
   }
 
-  const handleQuickLogin = async (credentials: { phone: string; password: string }, type: string) => {
-    setLoading(true)
-    clearMessages()
-
-    try {
-      const result = await authenticateUser(credentials.phone, credentials.password)
-      if (result.success && result.user) {
-        localStorage.setItem("user", JSON.stringify(result.user))
-        setSuccess(`${type} login successful! Redirecting...`)
-
-        setTimeout(() => {
-          if (result.user.role === "admin") {
-            router.push("/admin-dashboard")
-          } else if (result.user.role === "driver") {
-            router.push("/driver-dashboard")
-          } else {
-            router.push("/user-dashboard")
-          }
-        }, 1000)
-      } else {
-        setError(`${type} login failed: ${result.error}`)
-      }
-    } catch (error) {
-      console.error(`${type} login error:`, error)
-      setError(`${type} login failed`)
-    } finally {
-      setLoading(false)
-    }
+  const removeFile = (fileType: 'photograph' | 'drivingLicense') => {
+    setDriverData(prev => ({
+      ...prev,
+      [fileType]: null
+    }))
   }
 
   return (
@@ -248,9 +267,6 @@ export default function AuthPage() {
                     <Button type="submit" className="w-full" disabled={loading}>
                       {loading ? "Signing in..." : "Sign In"}
                     </Button>
-
-                    {/* Quick Login Options */}
-                    
                   </form>
                 </TabsContent>
 
@@ -437,9 +453,36 @@ export default function AuthPage() {
                           <div className="grid grid-cols-2 gap-4">
                             <div>
                               <Label htmlFor="photograph" className="cursor-pointer">
-                                <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-4 text-center hover:border-primary/50 transition-colors">
-                                  <Upload className="h-6 w-6 mx-auto mb-2 text-muted-foreground" />
-                                  <span className="text-sm text-muted-foreground">Upload Photo</span>
+                                <div className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
+                                  driverData.photograph 
+                                    ? 'border-green-500 bg-green-50' 
+                                    : 'border-muted-foreground/25 hover:border-primary/50'
+                                }`}>
+                                  {driverData.photograph ? (
+                                    <div className="space-y-2">
+                                      <Check className="h-6 w-6 mx-auto text-green-600" />
+                                      <span className="text-sm text-green-700 block truncate">
+                                        {driverData.photograph.name}
+                                      </span>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={(e) => {
+                                          e.preventDefault()
+                                          removeFile('photograph')
+                                        }}
+                                        className="h-6 w-6 p-0"
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <div>
+                                      <Upload className="h-6 w-6 mx-auto mb-2 text-muted-foreground" />
+                                      <span className="text-sm text-muted-foreground">Upload Photo</span>
+                                    </div>
+                                  )}
                                 </div>
                               </Label>
                               <Input
@@ -454,9 +497,36 @@ export default function AuthPage() {
                             </div>
                             <div>
                               <Label htmlFor="license" className="cursor-pointer">
-                                <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-4 text-center hover:border-primary/50 transition-colors">
-                                  <Upload className="h-6 w-6 mx-auto mb-2 text-muted-foreground" />
-                                  <span className="text-sm text-muted-foreground">Driving License</span>
+                                <div className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
+                                  driverData.drivingLicense 
+                                    ? 'border-green-500 bg-green-50' 
+                                    : 'border-muted-foreground/25 hover:border-primary/50'
+                                }`}>
+                                  {driverData.drivingLicense ? (
+                                    <div className="space-y-2">
+                                      <Check className="h-6 w-6 mx-auto text-green-600" />
+                                      <span className="text-sm text-green-700 block truncate">
+                                        {driverData.drivingLicense.name}
+                                      </span>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={(e) => {
+                                          e.preventDefault()
+                                          removeFile('drivingLicense')
+                                        }}
+                                        className="h-6 w-6 p-0"
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <div>
+                                      <Upload className="h-6 w-6 mx-auto mb-2 text-muted-foreground" />
+                                      <span className="text-sm text-muted-foreground">Driving License</span>
+                                    </div>
+                                  )}
                                 </div>
                               </Label>
                               <Input
@@ -472,8 +542,8 @@ export default function AuthPage() {
                           </div>
                         </div>
 
-                        <Button type="submit" className="w-full" disabled={loading}>
-                          {loading ? "Registering..." : "Register as Driver"}
+                        <Button type="submit" className="w-full" disabled={loading || uploadingFiles}>
+                          {uploadingFiles ? "Uploading Documents..." : loading ? "Registering..." : "Register as Driver"}
                         </Button>
                       </form>
                     )}

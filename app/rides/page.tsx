@@ -514,7 +514,7 @@ export default function RidesPage() {
                           </div>
                           <div className="flex items-center space-x-2">
                             <IndianRupee className="h-4 w-4" />
-                            <span>₹{ride.price} per seat</span>
+                            <span>{ride.price} per seat</span>
                           </div>
                           <div className="flex items-center space-x-2">
                             <Car className="h-4 w-4" />
