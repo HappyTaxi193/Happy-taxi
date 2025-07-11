@@ -30,7 +30,9 @@ interface Ride {
   available_seats: number
   departure_time: string
   status: "active" | "completed" | "cancelled"
+  driver_id: string // Make sure this exists in your rides table
   drivers: {
+    id: string
     primary_phone: string
     secondary_phone: string | null
     car_make: string
@@ -90,20 +92,58 @@ export default function RidesPage() {
     filterRides()
   }, [fromLocation, toLocation, priceFilter, ratingFilter, timeFilter, rides])
 
+  // Function to calculate driver rating from reviews
+  const calculateDriverRating = async (driverId: string) => {
+    try {
+      // Get all reviews for this driver through their rides
+      const { data: reviews, error } = await supabase
+        .from("reviews")
+        .select(`
+          rating,
+          bookings!inner(
+            rides!inner(
+              driver_id
+            )
+          )
+        `)
+        .eq("bookings.rides.driver_id", driverId)
+
+      if (error) {
+        console.error("Error fetching driver reviews:", error)
+        return { rating: 0, total_reviews: 0 }
+      }
+
+      if (!reviews || reviews.length === 0) {
+        return { rating: 0, total_reviews: 0 }
+      }
+
+      const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0)
+      const avgRating = totalRating / reviews.length
+
+      return {
+        rating: Math.round(avgRating * 10) / 10, // Round to 1 decimal place
+        total_reviews: reviews.length
+      }
+    } catch (error) {
+      console.error("Error calculating driver rating:", error)
+      return { rating: 0, total_reviews: 0 }
+    }
+  }
+
   const fetchRides = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      // First fetch rides with driver info
+      const { data: ridesData, error } = await supabase
         .from("rides")
         .select(`
           *,
           drivers (
+            id,
             primary_phone,
             secondary_phone,
             car_make,
             car_model,
-            vehicle_number,
-            rating,
-            total_reviews
+            vehicle_number
           )
         `)
         .eq("status", "active")
@@ -112,7 +152,23 @@ export default function RidesPage() {
         .order("departure_time", { ascending: true })
 
       if (error) throw error
-      setRides(data || [])
+
+      // Calculate ratings for each driver
+      const ridesWithRatings = await Promise.all(
+        (ridesData || []).map(async (ride) => {
+          const driverRating = await calculateDriverRating(ride.drivers.id)
+          return {
+            ...ride,
+            drivers: {
+              ...ride.drivers,
+              rating: driverRating.rating,
+              total_reviews: driverRating.total_reviews
+            }
+          }
+        })
+      )
+
+      setRides(ridesWithRatings)
     } catch (error) {
       console.error("Error fetching rides:", error)
     } finally {
@@ -473,13 +529,21 @@ export default function RidesPage() {
                             <div className="flex items-center space-x-4">
                               {/* Driver Rating */}
                               <div className="flex items-center space-x-1">
-                                {renderStars(ride.drivers.rating)}
-                                <span className="text-sm font-medium ml-1">
-                                  {ride.drivers.rating.toFixed(1)}
-                                </span>
-                                <span className="text-xs text-muted-foreground">
-                                  ({ride.drivers.total_reviews} reviews)
-                                </span>
+                                {ride.drivers.total_reviews > 0 ? (
+                                  <>
+                                    {renderStars(ride.drivers.rating)}
+                                    <span className="text-sm font-medium ml-1">
+                                      {ride.drivers.rating.toFixed(1)}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      ({ride.drivers.total_reviews} reviews)
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span className="text-sm text-muted-foreground">
+                                    No reviews yet
+                                  </span>
+                                )}
                               </div>
                               
                               {/* Phone number - only visible if booked */}
@@ -531,12 +595,18 @@ export default function RidesPage() {
                                       </div>
                                       <div className="flex items-center space-x-2">
                                         <strong>Driver Rating:</strong>
-                                        <div className="flex items-center space-x-1">
-                                          {renderStars(selectedRide.drivers.rating)}
-                                          <span className="text-sm">
-                                            {selectedRide.drivers.rating.toFixed(1)}
+                                        {selectedRide.drivers.total_reviews > 0 ? (
+                                          <div className="flex items-center space-x-1">
+                                            {renderStars(selectedRide.drivers.rating)}
+                                            <span className="text-sm">
+                                              {selectedRide.drivers.rating.toFixed(1)}
+                                            </span>
+                                          </div>
+                                        ) : (
+                                          <span className="text-sm text-muted-foreground">
+                                            No reviews yet
                                           </span>
-                                        </div>
+                                        )}
                                       </div>
                                       <div>
                                         <strong>Vehicle:</strong> {selectedRide.drivers.car_make}{" "}
