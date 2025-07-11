@@ -274,6 +274,11 @@ export default function UserDashboard() {
     return booking.reviews && booking.reviews.length > 0
   }
 
+  // Calculate total spent (only confirmed bookings)
+  const totalSpent = bookings
+    .filter(booking => booking.status === "confirmed")
+    .reduce((sum, booking) => sum + booking.total_price, 0)
+
   if (!user) return null
 
   return (
@@ -322,7 +327,7 @@ export default function UserDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  ₹{bookings.reduce((sum, booking) => sum + booking.total_price, 0)}
+                  ₹{totalSpent}
                 </div>
               </CardContent>
             </Card>
