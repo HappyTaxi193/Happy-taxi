@@ -36,6 +36,7 @@ export default function AdminDashboard() {
     verifiedDrivers: 0,
   })
   const [loading, setLoading] = useState(true)
+  const [processingDrivers, setProcessingDrivers] = useState<Set<string>>(new Set())
   const router = useRouter()
 
   useEffect(() => {
@@ -57,6 +58,8 @@ export default function AdminDashboard() {
 
   const fetchData = async () => {
     try {
+      setLoading(true)
+      
       // Fetch drivers with user info
       const { data: driversData, error: driversError } = await supabase
         .from("drivers")
@@ -66,10 +69,19 @@ export default function AdminDashboard() {
         `)
         .order("created_at", { ascending: false })
 
-      if (driversError) throw driversError
+      if (driversError) {
+        console.error("Error fetching drivers:", driversError)
+        throw driversError
+      }
 
       // Fetch stats
-      const { data: usersData } = await supabase.from("users").select("role")
+      const { data: usersData, error: usersError } = await supabase
+        .from("users")
+        .select("role")
+
+      if (usersError) {
+        console.error("Error fetching users:", usersError)
+      }
 
       const totalUsers = usersData?.filter((u) => u.role === "user").length || 0
       const totalDrivers = driversData?.length || 0
@@ -85,6 +97,7 @@ export default function AdminDashboard() {
       })
     } catch (error) {
       console.error("Error fetching data:", error)
+      alert("Failed to load data. Please refresh the page.")
     } finally {
       setLoading(false)
     }
@@ -92,16 +105,38 @@ export default function AdminDashboard() {
 
   const handleVerifyDriver = async (driverId: string, verify: boolean) => {
     try {
-      const { error } = await supabase.from("drivers").update({ is_verified: verify }).eq("id", driverId)
-
-      if (error) throw error
-
-      // Refresh data
-      fetchData()
-      alert(`Driver ${verify ? "verified" : "rejected"} successfully!`)
+      setProcessingDrivers(prev => new Set(prev).add(driverId))
+      
+      if (verify) {
+        // Approve driver
+        const { error } = await supabase
+          .from("drivers")
+          .update({ is_verified: true })
+          .eq("id", driverId)
+        
+        if (error) throw error
+        alert("Driver approved successfully!")
+      } else {
+        // Delete rejected driver
+        const { error } = await supabase
+          .from("drivers")
+          .delete()
+          .eq("id", driverId)
+        
+        if (error) throw error
+        alert("Driver rejected and removed!")
+      }
+      
+      await fetchData()
     } catch (error) {
-      console.error("Error updating driver:", error)
-      alert("Failed to update driver status")
+      console.error("Error:", error)
+      alert(`Failed to ${verify ? "approve" : "reject"} driver`)
+    } finally {
+      setProcessingDrivers(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(driverId)
+        return newSet
+      })
     }
   }
 
@@ -233,13 +268,18 @@ export default function AdminDashboard() {
                             <Button
                               onClick={() => handleVerifyDriver(driver.id, true)}
                               className="bg-green-600 hover:bg-green-700"
+                              disabled={processingDrivers.has(driver.id)}
                             >
                               <CheckCircle className="h-4 w-4 mr-2" />
-                              Approve
+                              {processingDrivers.has(driver.id) ? "Processing..." : "Approve"}
                             </Button>
-                            <Button variant="destructive" onClick={() => handleVerifyDriver(driver.id, false)}>
+                            <Button 
+                              variant="destructive" 
+                              onClick={() => handleVerifyDriver(driver.id, false)}
+                              disabled={processingDrivers.has(driver.id)}
+                            >
                               <XCircle className="h-4 w-4 mr-2" />
-                              Reject
+                              {processingDrivers.has(driver.id) ? "Processing..." : "Reject"}
                             </Button>
                           </div>
                         </div>
