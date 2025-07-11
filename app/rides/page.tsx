@@ -353,6 +353,7 @@ export default function RidesPage() {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
+      <br /><br />
       <div className="pt-16 sm:pt-20 pb-8 sm:pb-12">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8">
           {/* Header */}
