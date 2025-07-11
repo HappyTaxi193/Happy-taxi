@@ -30,7 +30,7 @@ interface Ride {
   available_seats: number
   departure_time: string
   status: "active" | "completed" | "cancelled"
-  driver_id: string // Make sure this exists in your rides table
+  driver_id: string
   drivers: {
     id: string
     primary_phone: string
@@ -66,6 +66,7 @@ export default function RidesPage() {
   const [seatsToBook, setSeatsToBook] = useState(1)
   const [bookingLoading, setBookingLoading] = useState(false)
   const [user, setUser] = useState<any>(null)
+  const [showFilters, setShowFilters] = useState(false)
 
   const searchParams = useSearchParams()
 
@@ -95,7 +96,6 @@ export default function RidesPage() {
   // Function to calculate driver rating from reviews
   const calculateDriverRating = async (driverId: string) => {
     try {
-      // Get all reviews for this driver through their rides
       const { data: reviews, error } = await supabase
         .from("reviews")
         .select(`
@@ -121,7 +121,7 @@ export default function RidesPage() {
       const avgRating = totalRating / reviews.length
 
       return {
-        rating: Math.round(avgRating * 10) / 10, // Round to 1 decimal place
+        rating: Math.round(avgRating * 10) / 10,
         total_reviews: reviews.length
       }
     } catch (error) {
@@ -132,7 +132,6 @@ export default function RidesPage() {
 
   const fetchRides = useCallback(async () => {
     try {
-      // First fetch rides with driver info
       const { data: ridesData, error } = await supabase
         .from("rides")
         .select(`
@@ -153,7 +152,6 @@ export default function RidesPage() {
 
       if (error) throw error
 
-      // Calculate ratings for each driver
       const ridesWithRatings = await Promise.all(
         (ridesData || []).map(async (ride) => {
           const driverRating = await calculateDriverRating(ride.drivers.id)
@@ -194,7 +192,6 @@ export default function RidesPage() {
   const filterRides = () => {
     let filtered = rides
 
-    // Location filters
     if (fromLocation) {
       filtered = filtered.filter((ride) => 
         ride.from_location.toLowerCase().includes(fromLocation.toLowerCase())
@@ -207,7 +204,6 @@ export default function RidesPage() {
       )
     }
 
-    // Price filter
     if (priceFilter) {
       switch (priceFilter) {
         case "under-500":
@@ -225,16 +221,13 @@ export default function RidesPage() {
       }
     }
 
-    // Rating filter
     if (ratingFilter) {
       const minRating = parseFloat(ratingFilter)
       filtered = filtered.filter((ride) => ride.drivers.rating >= minRating)
     }
 
-    // Time filter
     if (timeFilter) {
       const now = new Date()
-      const currentHour = now.getHours()
       
       filtered = filtered.filter((ride) => {
         const rideTime = new Date(ride.departure_time)
@@ -286,7 +279,6 @@ export default function RidesPage() {
     setBookingLoading(true)
 
     try {
-      // Check if seats are still available
       const { data: currentRide, error: checkError } = await supabase
         .from("rides")
         .select("available_seats")
@@ -301,7 +293,6 @@ export default function RidesPage() {
         return
       }
 
-      // Create booking
       const { error: bookingError } = await supabase.from("bookings").insert([
         {
           user_id: user.id,
@@ -314,7 +305,6 @@ export default function RidesPage() {
 
       if (bookingError) throw bookingError
 
-      // Update available seats
       const { error: updateError } = await supabase
         .from("rides")
         .update({
@@ -349,7 +339,7 @@ export default function RidesPage() {
     return Array.from({ length: 5 }, (_, index) => (
       <Star
         key={index}
-        className={`h-4 w-4 ${
+        className={`h-3 w-3 sm:h-4 sm:w-4 ${
           index < Math.floor(rating) 
             ? "fill-yellow-400 text-yellow-400" 
             : index < rating 
@@ -363,235 +353,279 @@ export default function RidesPage() {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <div className="pt-20 pb-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="pt-16 sm:pt-20 pb-8 sm:pb-12">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8">
           {/* Header */}
-          <div className="text-center mb-8">
-            <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-4">Find Your Perfect Ride</h1>
-            <p className="text-xl text-muted-foreground">
+          <div className="text-center mb-6 sm:mb-8">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground mb-2 sm:mb-4">
+              Find Your Perfect Ride
+            </h1>
+            <p className="text-lg sm:text-xl text-muted-foreground px-4">
               Browse available rides and book your journey with trusted drivers
             </p>
           </div>
 
           {/* Search Filters */}
-          <Card className="mb-8">
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Search className="h-5 w-5" />
-                <span>Search & Filter Rides</span>
-              </CardTitle>
+          <Card className="mb-6 sm:mb-8">
+            <CardHeader className="pb-3 sm:pb-6">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center space-x-2 text-lg sm:text-xl">
+                  <Search className="h-4 w-4 sm:h-5 sm:w-5" />
+                  <span>Search Rides</span>
+                </CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="sm:hidden"
+                >
+                  <SlidersHorizontal className="h-4 w-4 mr-2" />
+                  Filters
+                </Button>
+              </div>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-                <div>
-                  <Label htmlFor="from">From Location</Label>
+            <CardContent className="space-y-4">
+              {/* Main Search - Always Visible */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="from" className="text-sm font-medium">From Location</Label>
                   <Input
                     id="from"
                     placeholder="Enter pickup location"
                     value={fromLocation}
                     onChange={(e) => setFromLocation(e.target.value)}
+                    className="h-10 sm:h-11"
                   />
                 </div>
-                <div>
-                  <Label htmlFor="to">To Location</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="to" className="text-sm font-medium">To Location</Label>
                   <Input
                     id="to"
                     placeholder="Enter destination"
                     value={toLocation}
                     onChange={(e) => setToLocation(e.target.value)}
+                    className="h-10 sm:h-11"
                   />
-                </div>
-                <div className="flex items-end">
-                  <Button onClick={clearFilters} variant="outline" className="w-full bg-transparent">
-                    <X className="h-4 w-4 mr-2" />
-                    Clear All Filters
-                  </Button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="price">Price Range</Label>
-                  <Select value={priceFilter} onValueChange={setPriceFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select price range" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="under-500">Under ₹500</SelectItem>
-                      <SelectItem value="500-1000">₹500 - ₹1000</SelectItem>
-                      <SelectItem value="1000-2000">₹1000 - ₹2000</SelectItem>
-                      <SelectItem value="above-2000">Above ₹2000</SelectItem>
-                    </SelectContent>
-                  </Select>
+              {/* Additional Filters - Toggle on Mobile */}
+              <div className={`${showFilters ? 'block' : 'hidden sm:block'} space-y-4`}>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="price" className="text-sm font-medium">Price Range</Label>
+                    <Select value={priceFilter} onValueChange={setPriceFilter}>
+                      <SelectTrigger className="h-10 sm:h-11">
+                        <SelectValue placeholder="Select price range" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="under-500">Under ₹500</SelectItem>
+                        <SelectItem value="500-1000">₹500 - ₹1000</SelectItem>
+                        <SelectItem value="1000-2000">₹1000 - ₹2000</SelectItem>
+                        <SelectItem value="above-2000">Above ₹2000</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="rating" className="text-sm font-medium">Minimum Rating</Label>
+                    <Select value={ratingFilter} onValueChange={setRatingFilter}>
+                      <SelectTrigger className="h-10 sm:h-11">
+                        <SelectValue placeholder="Select minimum rating" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="4.5">4.5+ Stars</SelectItem>
+                        <SelectItem value="4.0">4.0+ Stars</SelectItem>
+                        <SelectItem value="3.5">3.5+ Stars</SelectItem>
+                        <SelectItem value="3.0">3.0+ Stars</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="time" className="text-sm font-medium">Departure Time</Label>
+                    <Select value={timeFilter} onValueChange={setTimeFilter}>
+                      <SelectTrigger className="h-10 sm:h-11">
+                        <SelectValue placeholder="Select time range" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="next-2-hours">Next 2 Hours</SelectItem>
+                        <SelectItem value="today">Today</SelectItem>
+                        <SelectItem value="tomorrow">Tomorrow</SelectItem>
+                        <SelectItem value="morning">Morning (6AM-12PM)</SelectItem>
+                        <SelectItem value="afternoon">Afternoon (12PM-6PM)</SelectItem>
+                        <SelectItem value="evening">Evening (6PM-12AM)</SelectItem>
+                        <SelectItem value="night">Night (12AM-6AM)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="rating">Minimum Rating</Label>
-                  <Select value={ratingFilter} onValueChange={setRatingFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select minimum rating" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="4.5">4.5+ Stars</SelectItem>
-                      <SelectItem value="4.0">4.0+ Stars</SelectItem>
-                      <SelectItem value="3.5">3.5+ Stars</SelectItem>
-                      <SelectItem value="3.0">3.0+ Stars</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="time">Departure Time</Label>
-                  <Select value={timeFilter} onValueChange={setTimeFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select time range" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="next-2-hours">Next 2 Hours</SelectItem>
-                      <SelectItem value="today">Today</SelectItem>
-                      <SelectItem value="tomorrow">Tomorrow</SelectItem>
-                      <SelectItem value="morning">Morning (6AM-12PM)</SelectItem>
-                      <SelectItem value="afternoon">Afternoon (12PM-6PM)</SelectItem>
-                      <SelectItem value="evening">Evening (6PM-12AM)</SelectItem>
-                      <SelectItem value="night">Night (12AM-6AM)</SelectItem>
-                    </SelectContent>
-                  </Select>
+
+                <div className="flex justify-center sm:justify-start">
+                  <Button onClick={clearFilters} variant="outline" size="sm" className="bg-transparent">
+                    <X className="h-4 w-4 mr-2" />
+                    Clear All Filters
+                  </Button>
                 </div>
               </div>
             </CardContent>
           </Card>
 
           {/* Results */}
-          <div className="mb-4">
-            <p className="text-muted-foreground">
+          <div className="mb-4 px-1">
+            <p className="text-sm sm:text-base text-muted-foreground">
               {loading ? "Loading rides..." : `Found ${filteredRides.length} available rides`}
             </p>
           </div>
 
           {/* Rides List */}
           {loading ? (
-            <div className="text-center py-12">
-              <div className="text-lg">Loading available rides...</div>
+            <div className="text-center py-8 sm:py-12">
+              <div className="text-base sm:text-lg">Loading available rides...</div>
             </div>
           ) : filteredRides.length === 0 ? (
             <Card>
-              <CardContent className="text-center py-12">
-                <MapPin className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No rides found</h3>
-                <p className="text-muted-foreground mb-4">
+              <CardContent className="text-center py-8 sm:py-12">
+                <MapPin className="h-8 w-8 sm:h-12 sm:w-12 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-base sm:text-lg font-semibold mb-2">No rides found</h3>
+                <p className="text-sm sm:text-base text-muted-foreground mb-4 px-4">
                   {fromLocation || toLocation || priceFilter || ratingFilter || timeFilter
                     ? "Try adjusting your search criteria or filters to find more rides."
                     : "No rides are currently available. Check back later!"}
                 </p>
-                <Button onClick={clearFilters} variant="outline">
+                <Button onClick={clearFilters} variant="outline" size="sm">
                   Clear All Filters
                 </Button>
               </CardContent>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 gap-6">
+            <div className="grid grid-cols-1 gap-4 sm:gap-6">
               {filteredRides.map((ride) => (
                 <Card key={ride.id} className="hover:shadow-lg transition-shadow">
-                  <CardContent className="p-6">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-3">
-                          <MapPin className="h-5 w-5 text-primary" />
-                          <span className="text-lg font-semibold">
-                            {ride.from_location} → {ride.to_location}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm text-muted-foreground mb-4">
-                          <div className="flex items-center space-x-2">
-                            <Calendar className="h-4 w-4" />
-                            <div>
-                              <div>{new Date(ride.departure_time).toLocaleDateString()}</div>
-                              <div>{new Date(ride.departure_time).toLocaleTimeString()}</div>
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Users className="h-4 w-4" />
-                            <span>{ride.available_seats} seats available</span>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <IndianRupee className="h-4 w-4" />
-                            <span>{ride.price} per seat</span>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Car className="h-4 w-4" />
-                            <span>
-                              {ride.drivers.car_make} {ride.drivers.car_model}
+                  <CardContent className="p-4 sm:p-6">
+                    <div className="space-y-4">
+                      {/* Route and Price Header */}
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between space-y-3 sm:space-y-0">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2 mb-3">
+                            <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
+                            <span className="text-base sm:text-lg font-semibold leading-tight">
+                              {ride.from_location} → {ride.to_location}
                             </span>
                           </div>
                         </div>
-
-                        <div className="bg-muted/50 rounded-lg p-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-4">
-                              {/* Driver Rating */}
-                              <div className="flex items-center space-x-1">
-                                {ride.drivers.total_reviews > 0 ? (
-                                  <>
-                                    {renderStars(ride.drivers.rating)}
-                                    <span className="text-sm font-medium ml-1">
-                                      {ride.drivers.rating.toFixed(1)}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                      ({ride.drivers.total_reviews} reviews)
-                                    </span>
-                                  </>
-                                ) : (
-                                  <span className="text-sm text-muted-foreground">
-                                    No reviews yet
-                                  </span>
-                                )}
-                              </div>
-                              
-                              {/* Phone number - only visible if booked */}
-                              {user && isRideBooked(ride.id) ? (
-                                <div className="flex items-center space-x-2">
-                                  <Phone className="h-4 w-4" />
-                                  <span className="text-sm">Driver: {ride.drivers.primary_phone}</span>
-                                </div>
-                              ) : (
-                                <div className="flex items-center space-x-2">
-                                  <Phone className="h-4 w-4" />
-                                  <span className="text-sm">Phone visible after booking</span>
-                                </div>
-                              )}
-                            </div>
-                            <Badge variant="outline">{ride.drivers.vehicle_number}</Badge>
-                          </div>
+                        <div className="flex items-center justify-between sm:flex-col sm:items-end sm:text-right">
+                          <div className="text-xl sm:text-2xl font-bold text-primary">₹{ride.price}</div>
+                          <div className="text-xs sm:text-sm text-muted-foreground">per seat</div>
                         </div>
                       </div>
 
-                      <div className="ml-6 text-right">
-                        <div className="text-2xl font-bold text-primary mb-2">₹{ride.price}</div>
-                        <div className="text-sm text-muted-foreground mb-4">per seat</div>
+                      {/* Ride Details Grid */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
+                        <div className="flex items-start space-x-2">
+                          <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mt-0.5 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <div className="font-medium text-foreground truncate">
+                              {new Date(ride.departure_time).toLocaleDateString('en-IN', { 
+                                day: '2-digit',
+                                month: 'short'
+                              })}
+                            </div>
+                            <div className="text-xs">
+                              {new Date(ride.departure_time).toLocaleTimeString('en-IN', { 
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Users className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                          <span className="text-xs sm:text-sm">{ride.available_seats} seats</span>
+                        </div>
+                        <div className="flex items-center space-x-2 col-span-2 sm:col-span-1">
+                          <Car className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+                          <span className="text-xs sm:text-sm truncate">
+                            {ride.drivers.car_make} {ride.drivers.car_model}
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Badge variant="outline" className="text-xs px-2 py-1">
+                            {ride.drivers.vehicle_number}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      {/* Driver Info */}
+                      <div className="bg-muted/50 rounded-lg p-3 space-y-2 sm:space-y-0 sm:flex sm:items-center sm:justify-between">
+                        <div className="flex items-center space-x-2 sm:space-x-4">
+                          {/* Driver Rating */}
+                          <div className="flex items-center space-x-1">
+                            {ride.drivers.total_reviews > 0 ? (
+                              <>
+                                <div className="flex items-center space-x-1">
+                                  {renderStars(ride.drivers.rating)}
+                                </div>
+                                <span className="text-xs sm:text-sm font-medium">
+                                  {ride.drivers.rating.toFixed(1)}
+                                </span>
+                                <span className="text-xs text-muted-foreground hidden sm:inline">
+                                  ({ride.drivers.total_reviews} reviews)
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-xs sm:text-sm text-muted-foreground">
+                                No reviews yet
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Phone visibility info */}
+                        <div className="flex items-center space-x-2 text-xs sm:text-sm text-muted-foreground">
+                          <Phone className="h-3 w-3 sm:h-4 sm:w-4" />
+                          <span>
+                            {user && isRideBooked(ride.id) 
+                              ? `Driver: ${ride.drivers.primary_phone}`
+                              : "Phone visible after booking"
+                            }
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Book Button */}
+                      <div className="pt-2">
                         {user && isRideBooked(ride.id) ? (
-                          <Badge variant="secondary">Booked</Badge>
+                          <Badge variant="secondary" className="w-full justify-center py-2 sm:w-auto">
+                            Booked
+                          </Badge>
                         ) : (
                           <Dialog>
                             <DialogTrigger asChild>
-                              <Button onClick={() => setSelectedRide(ride)}>Book Ride</Button>
+                              <Button 
+                                onClick={() => setSelectedRide(ride)}
+                                className="w-full sm:w-auto"
+                                size="sm"
+                              >
+                                Book Ride
+                              </Button>
                             </DialogTrigger>
-                            <DialogContent className="sm:max-w-md">
+                            <DialogContent className="sm:max-w-md mx-4 sm:mx-0">
                               <DialogHeader>
                                 <DialogTitle>Book Your Ride</DialogTitle>
                                 <DialogDescription>Confirm your booking details below</DialogDescription>
                               </DialogHeader>
                               {selectedRide && (
                                 <div className="space-y-4">
-                                  <div className="bg-muted/50 rounded-lg p-4">
-                                    <div className="flex items-center space-x-2 mb-2">
-                                      <MapPin className="h-4 w-4 text-primary" />
-                                      <span className="font-medium">
+                                  <div className="bg-muted/50 rounded-lg p-4 space-y-3">
+                                    <div className="flex items-start space-x-2">
+                                      <MapPin className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                                      <span className="font-medium text-sm leading-tight">
                                         {selectedRide.from_location} → {selectedRide.to_location}
                                       </span>
                                     </div>
-                                    <div className="text-sm text-muted-foreground space-y-1">
+                                    <div className="text-sm text-muted-foreground space-y-2">
                                       <div>
                                         <strong>Departure:</strong>{" "}
-                                        {new Date(selectedRide.departure_time).toLocaleString()}
+                                        {new Date(selectedRide.departure_time).toLocaleString('en-IN')}
                                       </div>
                                       <div className="flex items-center space-x-2">
                                         <strong>Driver Rating:</strong>
@@ -618,8 +652,8 @@ export default function RidesPage() {
                                     </div>
                                   </div>
 
-                                  <div>
-                                    <Label htmlFor="seats">Number of Seats</Label>
+                                  <div className="space-y-2">
+                                    <Label htmlFor="seats" className="text-sm font-medium">Number of Seats</Label>
                                     <Input
                                       id="seats"
                                       type="number"
@@ -627,30 +661,30 @@ export default function RidesPage() {
                                       max={selectedRide.available_seats}
                                       value={seatsToBook}
                                       onChange={(e) => setSeatsToBook(Number.parseInt(e.target.value))}
-                                      className="mt-1"
+                                      className="h-10"
                                     />
-                                    <p className="text-sm text-muted-foreground mt-1">
+                                    <p className="text-xs text-muted-foreground">
                                       Available: {selectedRide.available_seats} seats
                                     </p>
                                   </div>
 
                                   <div className="bg-primary/10 rounded-lg p-4">
                                     <div className="flex justify-between items-center">
-                                      <span className="font-medium">Total Amount:</span>
-                                      <span className="text-xl font-bold text-primary">
+                                      <span className="font-medium text-sm">Total Amount:</span>
+                                      <span className="text-lg sm:text-xl font-bold text-primary">
                                         ₹{seatsToBook * selectedRide.price}
                                       </span>
                                     </div>
-                                    <p className="text-sm text-muted-foreground mt-1">
+                                    <p className="text-xs text-muted-foreground mt-1">
                                       {seatsToBook} seats × ₹{selectedRide.price} per seat
                                     </p>
                                   </div>
 
-                                  <div className="flex space-x-3">
+                                  <div className="flex flex-col sm:flex-row gap-3">
                                     <Button
                                       onClick={handleBookRide}
                                       disabled={bookingLoading || !user}
-                                      className="flex-1"
+                                      className="flex-1 h-10"
                                     >
                                       {bookingLoading ? "Booking..." : !user ? "Login Required" : "Confirm Booking"}
                                     </Button>
@@ -658,13 +692,14 @@ export default function RidesPage() {
                                       variant="outline"
                                       onClick={() => setSelectedRide(null)}
                                       disabled={bookingLoading}
+                                      className="sm:w-auto h-10"
                                     >
                                       Cancel
                                     </Button>
                                   </div>
 
                                   {!user && (
-                                    <p className="text-sm text-muted-foreground text-center">
+                                    <p className="text-xs text-muted-foreground text-center">
                                       Please{" "}
                                       <a href="/auth" className="text-primary hover:underline">
                                         login
