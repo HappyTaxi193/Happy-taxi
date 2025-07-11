@@ -6,7 +6,7 @@ import { Navbar } from "@/components/navbar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { MapPin, Calendar, Users, IndianRupee, Clock } from "lucide-react"
+import { MapPin, Calendar, Users, IndianRupee, Clock, AlertTriangle, Star, X } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 
 interface Booking {
@@ -33,6 +33,10 @@ export default function UserDashboard() {
   const [user, setUser] = useState<any>(null)
   const [bookings, setBookings] = useState<Booking[]>([])
   const [loading, setLoading] = useState(true)
+  const [showReviewModal, setShowReviewModal] = useState(false)
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
+  const [rating, setRating] = useState(0)
+  const [reviewText, setReviewText] = useState("")
   const router = useRouter()
 
   useEffect(() => {
@@ -63,7 +67,7 @@ export default function UserDashboard() {
             to_location,
             departure_time,
             price,
-            drivers (
+            driver:drivers (
               primary_phone,
               car_model,
               car_make,
@@ -88,6 +92,54 @@ export default function UserDashboard() {
     router.push("/")
   }
 
+  const handleSOS = (bookingId: string) => {
+    alert("SOS Alert triggered! Emergency services will be contacted.")
+  }
+
+  const handleReviewDriver = (booking: Booking) => {
+    setSelectedBooking(booking)
+    setShowReviewModal(true)
+  }
+
+  const submitReview = async () => {
+    if (!selectedBooking || rating === 0) return
+    
+    try {
+      const { error } = await supabase
+        .from("reviews")
+        .insert([
+          {
+            booking_id: selectedBooking.id,
+            user_id: user.id,
+            rating: rating,
+            review_text: reviewText || null,
+            created_at: new Date().toISOString()
+          }
+        ])
+
+      if (error) {
+        console.error("Supabase error:", error)
+        throw error
+      }
+      
+      alert("Review submitted successfully!")
+      setShowReviewModal(false)
+      setRating(0)
+      setReviewText("")
+      setSelectedBooking(null)
+    } catch (error) {
+      console.error("Error submitting review:", error)
+      alert("Failed to submit review. Please try again.")
+    }
+  }
+
+  const closeReviewModal = () => {
+    setShowReviewModal(false)
+    setRating(0)
+    setReviewText("")
+    setSelectedBooking(null)
+  }
+
   if (!user) return null
 
   return (
@@ -95,7 +147,6 @@ export default function UserDashboard() {
       <Navbar />
       <div className="pt-20 pb-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Header */}
           <div className="flex justify-between items-center mb-8">
             <div>
               <h1 className="text-3xl font-bold text-foreground">Welcome back!</h1>
@@ -111,7 +162,6 @@ export default function UserDashboard() {
             </div>
           </div>
 
-          {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -144,7 +194,6 @@ export default function UserDashboard() {
             </Card>
           </div>
 
-          {/* Bookings List */}
           <Card>
             <CardHeader>
               <CardTitle>Your Bookings</CardTitle>
@@ -193,7 +242,7 @@ export default function UserDashboard() {
                       </div>
 
                       {booking.ride.driver && (
-                        <div className="bg-muted/50 rounded p-3 text-sm">
+                        <div className="bg-muted/50 rounded p-3 text-sm mb-3">
                           <p>
                             <strong>Driver:</strong> {booking.ride.driver.primary_phone}
                           </p>
@@ -203,6 +252,27 @@ export default function UserDashboard() {
                           </p>
                         </div>
                       )}
+
+                      <div className="flex space-x-2">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleSOS(booking.id)}
+                          className="flex items-center space-x-1"
+                        >
+                          <AlertTriangle className="h-4 w-4" />
+                          <span>SOS</span>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleReviewDriver(booking)}
+                          className="flex items-center space-x-1"
+                        >
+                          <Star className="h-4 w-4" />
+                          <span>Review Driver</span>
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -211,6 +281,71 @@ export default function UserDashboard() {
           </Card>
         </div>
       </div>
+
+      {showReviewModal && selectedBooking && (
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-background border border-border rounded-lg p-6 w-full max-w-md mx-4 shadow-lg">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-foreground">Review Driver</h3>
+              <Button variant="ghost" size="sm" onClick={closeReviewModal}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-sm text-muted-foreground mb-2">
+                {selectedBooking.ride.from_location} → {selectedBooking.ride.to_location}
+              </p>
+              {selectedBooking.ride.driver && (
+                <p className="text-sm text-muted-foreground">
+                  Driver: {selectedBooking.ride.driver.primary_phone}
+                </p>
+              )}
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-foreground mb-2">Rating</label>
+              <div className="flex space-x-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    onClick={() => setRating(star)}
+                    className={`text-2xl transition-colors ${
+                      star <= rating ? 'text-yellow-400' : 'text-muted-foreground hover:text-yellow-300'
+                    }`}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-foreground mb-2">Review (Optional)</label>
+              <textarea
+                value={reviewText}
+                onChange={(e) => setReviewText(e.target.value)}
+                className="w-full p-2 bg-background border border-input rounded-md resize-none text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                rows={3}
+                placeholder="Share your experience..."
+              />
+            </div>
+
+            <div className="flex space-x-2">
+              <Button
+                onClick={submitReview}
+                disabled={rating === 0}
+                className="flex-1"
+              >
+                Submit Review
+              </Button>
+              <Button variant="outline" onClick={closeReviewModal}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

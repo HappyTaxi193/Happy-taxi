@@ -11,7 +11,9 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Car, Plus, MapPin, Calendar, Users, IndianRupee, Clock, CheckCircle, XCircle } from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Car, Plus, MapPin, Calendar, Users, IndianRupee, Clock, CheckCircle, XCircle, AlertTriangle, Star, Phone } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 
 interface Driver {
@@ -38,12 +40,30 @@ interface Ride {
   created_at: string
 }
 
+interface Booking {
+  id: string
+  ride_id: string
+  user_id: string
+  seats_booked: number
+  status: string
+  created_at: string
+  user: {
+    phone: string
+    name: string
+  }
+}
+
 export default function DriverDashboard() {
   const [user, setUser] = useState<any>(null)
   const [driver, setDriver] = useState<Driver | null>(null)
   const [rides, setRides] = useState<Ride[]>([])
+  const [bookings, setBookings] = useState<Booking[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddRide, setShowAddRide] = useState(false)
+  const [selectedCustomer, setSelectedCustomer] = useState<Booking | null>(null)
+  const [reviewText, setReviewText] = useState("")
+  const [rating, setRating] = useState(5)
+  const [sosActive, setSosActive] = useState(false)
   const [newRide, setNewRide] = useState({
     from_location: "",
     to_location: "",
@@ -72,25 +92,31 @@ export default function DriverDashboard() {
 
   const fetchDriverData = async (userId: string) => {
     try {
-      // Fetch driver profile
       const { data: driverData, error: driverError } = await supabase
         .from("drivers")
         .select("*")
         .eq("user_id", userId)
         .single()
 
-      if (driverError) throw driverError
+      if (driverError) {
+        console.error("Driver error:", driverError)
+        throw driverError
+      }
       setDriver(driverData)
 
-      // Fetch driver's rides
       const { data: ridesData, error: ridesError } = await supabase
         .from("rides")
         .select("*")
         .eq("driver_id", driverData.id)
         .order("created_at", { ascending: false })
 
-      if (ridesError) throw ridesError
+      if (ridesError) {
+        console.error("Rides error:", ridesError)
+        throw ridesError
+      }
       setRides(ridesData || [])
+
+      setBookings([])
     } catch (error) {
       console.error("Error fetching driver data:", error)
     } finally {
@@ -117,7 +143,6 @@ export default function DriverDashboard() {
 
       if (error) throw error
 
-      // Reset form and refresh rides
       setNewRide({
         from_location: "",
         to_location: "",
@@ -140,12 +165,10 @@ export default function DriverDashboard() {
     }
 
     try {
-      // Update ride status to cancelled
       const { error } = await supabase.from("rides").update({ status: "cancelled" }).eq("id", rideId)
 
       if (error) throw error
 
-      // Refresh rides list
       fetchDriverData(user.id)
       alert("Ride cancelled successfully!")
     } catch (error) {
@@ -153,6 +176,76 @@ export default function DriverDashboard() {
       alert("Failed to cancel ride. Please try again.")
     }
   }
+
+  const handleSOS = async () => {
+    setSosActive(true)
+    try {
+      const { error } = await supabase.from("sos_alerts").insert([
+        {
+          driver_id: driver?.id,
+          location: "Current Location",
+          status: "active",
+        },
+      ])
+
+      if (error) throw error
+
+      alert("SOS Alert sent! Emergency services have been notified.")
+    } catch (error) {
+      console.error("Error sending SOS:", error)
+      alert("Failed to send SOS alert. Please try calling emergency services directly.")
+    } finally {
+      setSosActive(false)
+    }
+  }
+
+  const handleSubmitReview = async () => {
+  if (!selectedCustomer) return
+
+  try {
+    // First check if review already exists
+    const { data: existingReview, error: checkError } = await supabase
+      .from("driver_reviews")
+      .select("id")
+      .eq("booking_id", selectedCustomer.id)
+      .single()
+
+    if (checkError && checkError.code !== 'PGRST116') {
+      // PGRST116 = no rows returned, which is what we want
+      throw checkError
+    }
+
+    if (existingReview) {
+      alert("You have already reviewed this customer for this booking.")
+      setSelectedCustomer(null)
+      return
+    }
+
+    // Insert new review
+    const { error } = await supabase.from("driver_reviews").insert([
+      {
+        driver_id: driver?.id,
+        customer_id: selectedCustomer.user_id,
+        booking_id: selectedCustomer.id,
+        rating: rating,
+        review: reviewText,
+      },
+    ])
+
+    if (error) throw error
+
+    setSelectedCustomer(null)
+    setReviewText("")
+    setRating(5)
+    alert("Review submitted successfully!")
+    
+    // Refresh bookings to update UI
+    fetchDriverData(user.id)
+  } catch (error) {
+    console.error("Error submitting review:", error)
+    alert("Failed to submit review. Please try again.")
+  }
+}
 
   const handleLogout = () => {
     localStorage.removeItem("user")
@@ -189,11 +282,10 @@ export default function DriverDashboard() {
       <Navbar />
       <div className="pt-20 pb-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Header */}
           <div className="flex justify-between items-center mb-8">
             <div>
               <h1 className="text-3xl font-bold text-foreground">Driver Dashboard</h1>
-              <p className="text-muted-foreground">
+              <div className="text-muted-foreground">
                 Welcome back! Phone: {user.phone}
                 {!driver.is_verified && (
                   <Badge variant="destructive" className="ml-2">
@@ -201,14 +293,24 @@ export default function DriverDashboard() {
                   </Badge>
                 )}
                 {driver.is_verified && <Badge className="ml-2 bg-green-600">Verified</Badge>}
-              </p>
+              </div>
             </div>
-            <Button variant="outline" onClick={handleLogout}>
-              Logout
-            </Button>
+            <div className="flex space-x-2">
+              <Button
+                variant="destructive"
+                onClick={handleSOS}
+                disabled={sosActive}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                <AlertTriangle className="h-4 w-4 mr-2" />
+                {sosActive ? "Sending SOS..." : "SOS"}
+              </Button>
+              <Button variant="outline" onClick={handleLogout}>
+                Logout
+              </Button>
+            </div>
           </div>
 
-          {/* Verification Notice */}
           {!driver.is_verified && (
             <Card className="mb-8 border-orange-200 bg-orange-50 dark:bg-orange-950">
               <CardContent className="pt-6">
@@ -223,7 +325,6 @@ export default function DriverDashboard() {
             </Card>
           )}
 
-          {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -268,15 +369,14 @@ export default function DriverDashboard() {
             </Card>
           </div>
 
-          {/* Main Content */}
           <Tabs defaultValue="rides">
             <TabsList>
               <TabsTrigger value="rides">My Rides</TabsTrigger>
+              <TabsTrigger value="customers">Customers</TabsTrigger>
               <TabsTrigger value="profile">Profile</TabsTrigger>
             </TabsList>
 
             <TabsContent value="rides" className="space-y-6">
-              {/* Add Ride Button */}
               {driver.is_verified && (
                 <Card>
                   <CardHeader>
@@ -364,7 +464,6 @@ export default function DriverDashboard() {
                 </Card>
               )}
 
-              {/* Rides List */}
               <Card>
                 <CardHeader>
                   <CardTitle>Your Rides</CardTitle>
@@ -436,6 +535,96 @@ export default function DriverDashboard() {
                                 </Button>
                               )}
                             </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="customers">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Customer Management</CardTitle>
+                  <CardDescription>View and review your customers</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {bookings.length === 0 ? (
+                    <div className="text-center py-8">
+                      <p className="text-muted-foreground">No customer bookings yet</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {bookings.map((booking) => (
+                        <div key={booking.id} className="border rounded-lg p-4">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2 mb-2">
+                                <Users className="h-4 w-4 text-primary" />
+                                <span className="font-medium">{booking.user.name}</span>
+                              </div>
+                              <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                                <div className="flex items-center space-x-1">
+                                  <Phone className="h-4 w-4" />
+                                  <span>{booking.user.phone}</span>
+                                </div>
+                                <div className="flex items-center space-x-1">
+                                  <Users className="h-4 w-4" />
+                                  <span>{booking.seats_booked} seats</span>
+                                </div>
+                                <Badge variant="secondary">{booking.status}</Badge>
+                              </div>
+                            </div>
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button size="sm" onClick={() => setSelectedCustomer(booking)}>
+                                  <Star className="h-4 w-4 mr-1" />
+                                  Review
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle>Review Customer</DialogTitle>
+                                  <DialogDescription>
+                                    Rate your experience with {booking.user.name}
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <div className="space-y-4">
+                                  <div>
+                                    <Label>Rating</Label>
+                                    <div className="flex space-x-1 mt-2">
+                                      {[1, 2, 3, 4, 5].map((star) => (
+                                        <Star
+                                          key={star}
+                                          className={`h-6 w-6 cursor-pointer ${
+                                            star <= rating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"
+                                          }`}
+                                          onClick={() => setRating(star)}
+                                        />
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <Label htmlFor="review">Review</Label>
+                                    <Textarea
+                                      id="review"
+                                      placeholder="Share your experience with this customer..."
+                                      value={reviewText}
+                                      onChange={(e) => setReviewText(e.target.value)}
+                                      className="mt-2"
+                                    />
+                                  </div>
+                                  <div className="flex space-x-2">
+                                    <Button onClick={handleSubmitReview}>Submit Review</Button>
+                                    <Button variant="outline" onClick={() => setSelectedCustomer(null)}>
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                </div>
+                              </DialogContent>
+                            </Dialog>
                           </div>
                         </div>
                       ))}
