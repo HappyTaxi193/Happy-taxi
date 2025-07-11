@@ -366,7 +366,7 @@ export default function UserDashboard() {
                             </div>
                             <div className="flex items-center space-x-1">
                               <IndianRupee className="h-4 w-4" />
-                              <span>₹{booking.total_price}</span>
+                              <span>{booking.total_price}</span>
                             </div>
                           </div>
                         </div>
