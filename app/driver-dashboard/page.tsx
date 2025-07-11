@@ -372,7 +372,6 @@ export default function DriverDashboard() {
           <Tabs defaultValue="rides">
             <TabsList>
               <TabsTrigger value="rides">My Rides</TabsTrigger>
-              <TabsTrigger value="customers">Customers</TabsTrigger>
               <TabsTrigger value="profile">Profile</TabsTrigger>
             </TabsList>
 
@@ -535,96 +534,6 @@ export default function DriverDashboard() {
                                 </Button>
                               )}
                             </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="customers">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Customer Management</CardTitle>
-                  <CardDescription>View and review your customers</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {bookings.length === 0 ? (
-                    <div className="text-center py-8">
-                      <p className="text-muted-foreground">No customer bookings yet</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {bookings.map((booking) => (
-                        <div key={booking.id} className="border rounded-lg p-4">
-                          <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                              <div className="flex items-center space-x-2 mb-2">
-                                <Users className="h-4 w-4 text-primary" />
-                                <span className="font-medium">{booking.user.name}</span>
-                              </div>
-                              <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                                <div className="flex items-center space-x-1">
-                                  <Phone className="h-4 w-4" />
-                                  <span>{booking.user.phone}</span>
-                                </div>
-                                <div className="flex items-center space-x-1">
-                                  <Users className="h-4 w-4" />
-                                  <span>{booking.seats_booked} seats</span>
-                                </div>
-                                <Badge variant="secondary">{booking.status}</Badge>
-                              </div>
-                            </div>
-                            <Dialog>
-                              <DialogTrigger asChild>
-                                <Button size="sm" onClick={() => setSelectedCustomer(booking)}>
-                                  <Star className="h-4 w-4 mr-1" />
-                                  Review
-                                </Button>
-                              </DialogTrigger>
-                              <DialogContent>
-                                <DialogHeader>
-                                  <DialogTitle>Review Customer</DialogTitle>
-                                  <DialogDescription>
-                                    Rate your experience with {booking.user.name}
-                                  </DialogDescription>
-                                </DialogHeader>
-                                <div className="space-y-4">
-                                  <div>
-                                    <Label>Rating</Label>
-                                    <div className="flex space-x-1 mt-2">
-                                      {[1, 2, 3, 4, 5].map((star) => (
-                                        <Star
-                                          key={star}
-                                          className={`h-6 w-6 cursor-pointer ${
-                                            star <= rating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"
-                                          }`}
-                                          onClick={() => setRating(star)}
-                                        />
-                                      ))}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <Label htmlFor="review">Review</Label>
-                                    <Textarea
-                                      id="review"
-                                      placeholder="Share your experience with this customer..."
-                                      value={reviewText}
-                                      onChange={(e) => setReviewText(e.target.value)}
-                                      className="mt-2"
-                                    />
-                                  </div>
-                                  <div className="flex space-x-2">
-                                    <Button onClick={handleSubmitReview}>Submit Review</Button>
-                                    <Button variant="outline" onClick={() => setSelectedCustomer(null)}>
-                                      Cancel
-                                    </Button>
-                                  </div>
-                                </div>
-                              </DialogContent>
-                            </Dialog>
                           </div>
                         </div>
                       ))}
