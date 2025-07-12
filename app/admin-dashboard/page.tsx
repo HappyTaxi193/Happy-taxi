@@ -1,6 +1,6 @@
 "use client"
 import { supabase } from "@/lib/supabase"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -53,6 +53,7 @@ interface Booking {
   status: string
   created_at: string
   updated_at: string
+  rides?: { driver_id: string; is_ride_completed: boolean | null }; // Added is_ride_completed here for joined data
 }
 
 interface Ride {
@@ -67,6 +68,18 @@ interface Ride {
   status: string
   created_at: string
   updated_at: string
+  is_ride_completed: boolean | null; // Changed from is_fee_approved
+  fee_status: string;
+}
+
+interface Review {
+  id: string;
+  booking_id: string;
+  user_id: string;
+  rating: number;
+  review_text: string | null;
+  created_at: string;
+  bookings?: { ride_id: string };
 }
 
 export default function EnhancedAdminDashboard() {
@@ -75,6 +88,7 @@ export default function EnhancedAdminDashboard() {
   const [users, setUsers] = useState<User[]>([])
   const [bookings, setBookings] = useState<Booking[]>([])
   const [rides, setRides] = useState<Ride[]>([])
+  const [reviews, setReviews] = useState<Review[]>([])
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalDrivers: 0,
@@ -87,19 +101,18 @@ export default function EnhancedAdminDashboard() {
     completedRides: 0,
     averageRating: 0
   })
-  const [monthlyRevenue, setMonthlyRevenue] = useState<Record<string, number>>({}) // New state for monthly revenue
+  const [monthlyRevenue, setMonthlyRevenue] = useState<Record<string, number>>({})
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
 
-  // State to manage the active tab for the main content
   const [activeTab, setActiveTab] = useState("drivers");
-
 
   useEffect(() => {
     const userData = localStorage.getItem("user")
     if (!userData) {
+      // In a real app, use Next.js useRouter for client-side navigation
       // router.push("/auth")
       return
     }
@@ -112,13 +125,12 @@ export default function EnhancedAdminDashboard() {
 
     setUser(parsedUser)
     fetchData()
-  }, [])
+  }, []) // Empty dependency array for initial fetch on mount
 
   const fetchData = async () => {
     try {
       setLoading(true)
 
-      // Fetch drivers with user info
       const { data: driversData, error: driversError } = await supabase
         .from("drivers")
         .select(`
@@ -126,37 +138,43 @@ export default function EnhancedAdminDashboard() {
           users (phone, role)
         `)
         .order("created_at", { ascending: false })
-
       if (driversError) throw driversError
 
-      // Fetch users (customers)
       const { data: usersData, error: usersError } = await supabase
         .from("users")
         .select("*")
         .eq("role", "user")
         .order("created_at", { ascending: false })
-
       if (usersError) throw usersError
 
-      // Fetch bookings for analytics
+      // Fetch bookings with ride details including is_ride_completed
       const { data: bookingsData, error: bookingsError } = await supabase
         .from("bookings")
-        .select("*")
-
+        .select(`
+          *,
+          rides (driver_id, is_ride_completed)
+        `)
       if (bookingsError) throw bookingsError
 
-      // Fetch rides for analytics
+      // Fetch rides separately to get all ride statuses including is_ride_completed
       const { data: ridesData, error: ridesError } = await supabase
         .from("rides")
         .select("*")
-
       if (ridesError) throw ridesError
+
+      const { data: reviewsData, error: reviewsError } = await supabase
+        .from("reviews")
+        .select(`
+          *,
+          bookings (ride_id)
+        `)
+      if (reviewsError) throw reviewsError
 
       setDrivers(driversData || [])
       setUsers(usersData || [])
       setBookings(bookingsData || [])
       setRides(ridesData || [])
-
+      setReviews(reviewsData || [])
     } catch (error) {
       console.error("Error fetching data:", error)
       alert("Failed to load data. Please refresh the page.")
@@ -165,11 +183,8 @@ export default function EnhancedAdminDashboard() {
     }
   }
 
-  useEffect(() => {
-    calculateStats()
-  }, [drivers, users, bookings, rides])
-
-  const calculateStats = () => {
+  // Use useMemo to memoize calculated stats and derived drivers
+  const { calculatedDrivers, overallStats, calculatedMonthlyRevenue } = useMemo(() => {
     const totalUsers = users.filter(u => u.role === "user").length
     const totalDrivers = drivers.length
     const pendingDrivers = drivers.filter(d => !d.is_verified).length
@@ -177,35 +192,89 @@ export default function EnhancedAdminDashboard() {
     const bannedDrivers = drivers.filter(d => d.is_banned).length
     const bannedUsers = users.filter(u => u.is_banned).length
     const totalBookings = bookings.length
-    const totalRevenue = bookings.reduce((sum, booking) => sum + booking.total_price, 0)
-    const completedRides = rides.filter(r => r.status === "completed").length
-    const averageRating = drivers.length > 0 ? drivers.reduce((sum, d) => sum + (d.rating || 0), 0) / drivers.length : 0
+
+    // Calculate total revenue only for rides that are marked as completed
+    let totalRevenue = 0;
+    bookings.forEach(booking => {
+      // Find the corresponding ride for the booking
+      const ride = rides.find(r => r.id === booking.ride_id);
+      if (ride && ride.is_ride_completed === true) {
+        totalRevenue += booking.total_price;
+      }
+    });
+
+    // Calculate completed rides based on the new 'is_ride_completed' column
+    const completedRides = rides.filter(r => r.is_ride_completed === true).length;
+
+
+    // Calculate average rating and total reviews for each driver from the reviews table
+    const driverReviewsMap: { [key: string]: { totalRating: number; count: number } } = {}
+
+    reviews.forEach(review => {
+      const booking = bookings.find(b => b.id === review.booking_id);
+      if (booking && booking.rides && booking.rides.driver_id) {
+        const driverId = booking.rides.driver_id;
+        if (!driverReviewsMap[driverId]) {
+          driverReviewsMap[driverId] = { totalRating: 0, count: 0 };
+        }
+        driverReviewsMap[driverId].totalRating += review.rating;
+        driverReviewsMap[driverId].count += 1;
+      }
+    });
+
+    const updatedDrivers = drivers.map(driver => {
+      const reviewStats = driverReviewsMap[driver.id];
+      return {
+        ...driver,
+        rating: reviewStats ? (reviewStats.totalRating / reviewStats.count) : 0,
+        total_reviews: reviewStats ? reviewStats.count : 0
+      };
+    });
+
+    // Calculate overall average rating based on the updated driver ratings
+    const overallAverageRating = updatedDrivers.length > 0
+      ? updatedDrivers.reduce((sum, d) => sum + (d.rating || 0), 0) / updatedDrivers.length
+      : 0;
 
     // Calculate monthly revenue
     const monthlyRev: Record<string, number> = {}
     bookings.forEach(booking => {
-      const date = new Date(booking.created_at)
-      const yearMonth = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`
-      monthlyRev[yearMonth] = (monthlyRev[yearMonth] || 0) + booking.total_price
+        // Only include completed rides in monthly revenue
+        const ride = rides.find(r => r.id === booking.ride_id);
+        if (ride && ride.is_ride_completed === true) {
+            const date = new Date(booking.created_at)
+            const yearMonth = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`
+            monthlyRev[yearMonth] = (monthlyRev[yearMonth] || 0) + booking.total_price
+        }
     })
 
-    setStats({
-      totalUsers,
-      totalDrivers,
-      pendingDrivers,
-      verifiedDrivers,
-      bannedDrivers,
-      bannedUsers,
-      totalBookings,
-      totalRevenue,
-      completedRides,
-      averageRating
-    })
-    setMonthlyRevenue(monthlyRev) // Set the monthly revenue state
-  }
+    return {
+      calculatedDrivers: updatedDrivers,
+      overallStats: {
+        totalUsers,
+        totalDrivers,
+        pendingDrivers,
+        verifiedDrivers,
+        bannedDrivers,
+        bannedUsers,
+        totalBookings,
+        totalRevenue,
+        completedRides,
+        averageRating: overallAverageRating
+      },
+      calculatedMonthlyRevenue: monthlyRev
+    };
+  }, [drivers, users, bookings, rides, reviews]); // Dependencies for useMemo
+
+  // Update states only when the memoized values change
+  useEffect(() => {
+    setStats(overallStats);
+    setMonthlyRevenue(calculatedMonthlyRevenue);
+  }, [overallStats, calculatedMonthlyRevenue]);
+
 
   const handleDriverAction = async (driverId: string, action: string) => {
-    if (processingIds.has(driverId)) return // Prevent double-clicking
+    if (processingIds.has(driverId)) return
 
     try {
       setProcessingIds(prev => new Set(prev).add(driverId))
@@ -241,7 +310,7 @@ export default function EnhancedAdminDashboard() {
           break
       }
 
-      await fetchData() // Re-fetch data to update the UI
+      await fetchData()
       alert(`Driver ${action}ed successfully!`)
     } catch (error) {
       console.error("Error:", error)
@@ -256,7 +325,7 @@ export default function EnhancedAdminDashboard() {
   }
 
   const handleUserAction = async (userId: string, action: string) => {
-    if (processingIds.has(userId)) return // Prevent double-clicking
+    if (processingIds.has(userId)) return
 
     try {
       setProcessingIds(prev => new Set(prev).add(userId))
@@ -278,7 +347,7 @@ export default function EnhancedAdminDashboard() {
           break
       }
 
-      await fetchData() // Re-fetch data to update the UI
+      await fetchData()
       alert(`User ${action}ned successfully!`)
     } catch (error) {
       console.error("Error:", error)
@@ -294,7 +363,6 @@ export default function EnhancedAdminDashboard() {
 
   const handleLogout = () => {
     localStorage.removeItem("user")
-    // router.push("/") // You'll likely want to redirect to the login page
     alert("Logged out successfully!");
   }
 
@@ -342,7 +410,7 @@ export default function EnhancedAdminDashboard() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm mb-4">
             <div>
               <p><strong>Phone:</strong> {driver.primary_phone}</p>
-              <p><strong>Rating:</strong> {driver.rating}/5 ({driver.total_reviews} reviews)</p>
+              <p><strong>Rating:</strong> {driver.rating.toFixed(1)}/5 ({driver.total_reviews} reviews)</p>
             </div>
             <div>
               <p><strong>Earnings:</strong> ₹{driver.total_earnings?.toLocaleString() || 0}</p>
@@ -387,7 +455,6 @@ export default function EnhancedAdminDashboard() {
             )}
 
             <Dialog>
-              {/* CORRECTED: Move onClick to DialogTrigger */}
               <DialogTrigger asChild onClick={() => setSelectedDriver(driver)}>
                 <Button size="sm" variant="outline">
                   <Eye className="h-4 w-4 mr-1" />
@@ -422,7 +489,7 @@ export default function EnhancedAdminDashboard() {
 
                     <div>
                       <h4 className="font-semibold mb-2">Performance Stats</h4>
-                      <p><strong>Rating:</strong> {driver.rating}/5</p>
+                      <p><strong>Rating:</strong> {driver.rating.toFixed(1)}/5</p>
                       <p><strong>Total Reviews:</strong> {driver.total_reviews}</p>
                       <p><strong>Total Earnings:</strong> ₹{driver.total_earnings?.toLocaleString() || 0}</p>
                       <p><strong>Completed Rides:</strong> {driver.completed_rides || 0}</p>
@@ -430,7 +497,6 @@ export default function EnhancedAdminDashboard() {
                     </div>
                   </div>
 
-                  {/* New Section for Documents */}
                   <div className="space-y-2">
                     <h4 className="font-semibold mb-2">Documents</h4>
                     {driver.driving_license_url ? (
@@ -441,7 +507,7 @@ export default function EnhancedAdminDashboard() {
                             src={driver.driving_license_url}
                             alt="Driving License"
                             className="max-w-full h-auto rounded-md border shadow-sm cursor-pointer"
-                            style={{ maxWidth: '300px' }} // Adjust size as needed
+                            style={{ maxWidth: '300px' }}
                           />
                           Click to view full size
                         </a>
@@ -449,7 +515,6 @@ export default function EnhancedAdminDashboard() {
                     ) : (
                       <p className="text-muted-foreground">Driving License not available.</p>
                     )}
-                    {/* You can add Aadhaar card, photograph etc. here similarly */}
                     {driver.photograph_url && (
                         <div className="flex flex-col items-start space-y-2 mt-4">
                             <p><strong>Photograph:</strong></p>
@@ -458,7 +523,7 @@ export default function EnhancedAdminDashboard() {
                                     src={driver.photograph_url}
                                     alt="Driver Photograph"
                                     className="max-w-full h-auto rounded-md border shadow-sm cursor-pointer"
-                                    style={{ maxWidth: '200px' }} // Adjust size as needed
+                                    style={{ maxWidth: '200px' }}
                                 />
                                 Click to view full size
                             </a>
@@ -512,7 +577,6 @@ export default function EnhancedAdminDashboard() {
             </Button>
 
             <Dialog>
-              {/* CORRECTED: Move onClick to DialogTrigger */}
               <DialogTrigger asChild onClick={() => setSelectedUser(user)}>
                 <Button size="sm" variant="outline">
                   <Eye className="h-4 w-4 mr-1" />
@@ -547,25 +611,21 @@ export default function EnhancedAdminDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Use the flexible Navbar component */}
       <Navbar
         title="Admin Dashboard"
-        logoSrc="/admin-logo.png" // You might want a different logo for admin, or remove it
+        logoSrc="/admin-logo.png"
         onLogout={handleLogout}
-        showGetStarted={false} // Hide "Get Started" button for admin
+        showGetStarted={false}
         links={[
-          // These links will correspond to the tabs below
           { href: "#", label: "Drivers", onClick: () => setActiveTab("drivers") },
           { href: "#", label: "Customers", onClick: () => setActiveTab("users") },
           { href: "#", label: "Analytics", onClick: () => setActiveTab("analytics") },
         ]}
       />
 
-      <div className="max-w-7xl mx-auto p-4 sm:p-6 mt-16"> {/* Add top margin to account for fixed navbar height */}
-        {/* Dashboard Description */}
+      <div className="max-w-7xl mx-auto p-4 sm:p-6 mt-16">
         <p className="text-muted-foreground mb-8">Analysis of the platform</p>
 
-        {/* Stats Overview */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <StatCard title="Total Users" value={stats.totalUsers} icon={Users} />
           <StatCard title="Total Drivers" value={stats.totalDrivers} icon={Car} />
@@ -573,7 +633,6 @@ export default function EnhancedAdminDashboard() {
           <StatCard title="Total Revenue" value={`₹${stats.totalRevenue.toLocaleString()}`} icon={DollarSign} color="text-green-600" />
         </div>
 
-        {/* Analytics Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <StatCard title="Completed Rides" value={stats.completedRides} icon={CheckCircle} color="text-green-600" />
           <StatCard title="Average Rating" value={stats.averageRating.toFixed(1)} icon={Star} color="text-yellow-600" />
@@ -581,7 +640,6 @@ export default function EnhancedAdminDashboard() {
           <StatCard title="Banned Users" value={stats.bannedUsers} icon={AlertTriangle} color="text-red-600" />
         </div>
 
-        {/* Main Content */}
         <Tabs defaultValue="drivers" value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="drivers">Drivers ({stats.totalDrivers})</TabsTrigger>
@@ -589,7 +647,6 @@ export default function EnhancedAdminDashboard() {
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
           </TabsList>
 
-          {/* Drivers Tab */}
           <TabsContent value="drivers">
             <Card>
               <CardHeader>
@@ -607,10 +664,10 @@ export default function EnhancedAdminDashboard() {
                   <TabsContent value="pending" className="space-y-4 mt-6">
                     {loading ? (
                       <div className="text-center py-8">Loading drivers...</div>
-                    ) : drivers.filter(d => !d.is_verified).length === 0 ? (
+                    ) : calculatedDrivers.filter(d => !d.is_verified).length === 0 ? (
                       <div className="text-center py-8 text-muted-foreground">No pending approvals</div>
                     ) : (
-                      drivers.filter(d => !d.is_verified).map(driver => (
+                      calculatedDrivers.filter(d => !d.is_verified).map(driver => (
                         <DriverCard key={driver.id} driver={driver} />
                       ))
                     )}
@@ -619,10 +676,10 @@ export default function EnhancedAdminDashboard() {
                   <TabsContent value="verified" className="space-y-4 mt-6">
                     {loading ? (
                       <div className="text-center py-8">Loading drivers...</div>
-                    ) : drivers.filter(d => d.is_verified && !d.is_banned).length === 0 ? (
+                    ) : calculatedDrivers.filter(d => d.is_verified && !d.is_banned).length === 0 ? (
                       <div className="text-center py-8 text-muted-foreground">No verified drivers</div>
                     ) : (
-                      drivers.filter(d => d.is_verified && !d.is_banned).map(driver => (
+                      calculatedDrivers.filter(d => d.is_verified && !d.is_banned).map(driver => (
                         <DriverCard key={driver.id} driver={driver} />
                       ))
                     )}
@@ -631,10 +688,10 @@ export default function EnhancedAdminDashboard() {
                   <TabsContent value="banned" className="space-y-4 mt-6">
                     {loading ? (
                       <div className="text-center py-8">Loading drivers...</div>
-                    ) : drivers.filter(d => d.is_banned).length === 0 ? (
+                    ) : calculatedDrivers.filter(d => d.is_banned).length === 0 ? (
                       <div className="text-center py-8 text-muted-foreground">No banned drivers</div>
                     ) : (
-                      drivers.filter(d => d.is_banned).map(driver => (
+                      calculatedDrivers.filter(d => d.is_banned).map(driver => (
                         <DriverCard key={driver.id} driver={driver} />
                       ))
                     )}
@@ -644,7 +701,6 @@ export default function EnhancedAdminDashboard() {
             </Card>
           </TabsContent>
 
-          {/* Users Tab */}
           <TabsContent value="users">
             <Card>
               <CardHeader>
@@ -686,7 +742,6 @@ export default function EnhancedAdminDashboard() {
             </Card>
           </TabsContent>
 
-          {/* Analytics Tab */}
           <TabsContent value="analytics">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
@@ -718,7 +773,6 @@ export default function EnhancedAdminDashboard() {
                     </div>
                   </div>
 
-                  {/* Monthly Revenue Section */}
                   <div className="space-y-2 mt-6">
                     <h4 className="font-semibold mb-2 flex items-center gap-2">
                       <DollarSign className="h-5 w-5 text-green-600" />
@@ -727,7 +781,7 @@ export default function EnhancedAdminDashboard() {
                     {Object.keys(monthlyRevenue).length > 0 ? (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {Object.entries(monthlyRevenue)
-                          .sort(([monthA], [monthB]) => monthA.localeCompare(monthB))
+                          .sort(([month, _]) => month.localeCompare(month)) // Sort keys to ensure consistent order
                           .map(([month, revenue]) => (
                             <div key={month} className="flex justify-between items-center bg-gray-50 p-3 rounded-md">
                               <span className="text-sm text-muted-foreground">{month}</span>
