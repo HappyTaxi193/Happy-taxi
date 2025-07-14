@@ -13,23 +13,29 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Car, Plus, MapPin, Calendar, Users, IndianRupee, Clock, CheckCircle, XCircle, AlertTriangle, Star, Phone } from "lucide-react"
+import { Car, Plus, MapPin, Calendar, Users, IndianRupee, Clock, CheckCircle, XCircle, AlertTriangle, Star, Phone, Edit, Eye } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 
 interface Driver {
   id: string
+  user_id: string
+  photograph_url: string
   primary_phone: string
   secondary_phone: string | null
   address: string
   aadhaar_number: string
+  driving_license_url: string
   vehicle_number: string
   car_model: string
   car_make: string
   is_verified: boolean
+  total_earnings: number
+  completed_rides: number // Ensure this is part of the driver interface
 }
 
 interface Ride {
   id: string
+  driver_id: string
   from_location: string
   to_location: string
   price: number
@@ -38,6 +44,7 @@ interface Ride {
   departure_time: string
   status: "active" | "completed" | "cancelled"
   created_at: string
+  is_ride_completed: boolean | null; // Updated to allow null for initial state
 }
 
 interface Booking {
@@ -47,17 +54,23 @@ interface Booking {
   seats_booked: number
   status: string
   created_at: string
-  user: {
-    phone: string
-    name: string
+  // Changed 'user' to 'users' based on the error message and hint
+  users: { 
+    phone: string 
   }
+  rides?: {
+    id: string;
+    driver_id: string;
+    price: number;
+    status: string;
+    is_ride_completed: boolean | null;
+  };
 }
 
 export default function DriverDashboard() {
   const [user, setUser] = useState<any>(null)
   const [driver, setDriver] = useState<Driver | null>(null)
   const [rides, setRides] = useState<Ride[]>([])
-  const [bookings, setBookings] = useState<Booking[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddRide, setShowAddRide] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState<Booking | null>(null)
@@ -74,6 +87,18 @@ export default function DriverDashboard() {
     departure_time: "",
   })
   const router = useRouter()
+
+  // New states for Edit Ride functionality
+  const [showEditRideDialog, setShowEditRideDialog] = useState(false)
+  const [editingRide, setEditingRide] = useState<Ride | null>(null)
+  const [editedRideDetails, setEditedRideDetails] = useState({
+    price: "",
+    // Removed available_seats from state
+  })
+
+  // New states for Booking Summary functionality
+  const [showBookingSummaryDialog, setShowBookingSummaryDialog] = useState(false)
+  const [selectedRideBookings, setSelectedRideBookings] = useState<Booking[]>([])
 
   useEffect(() => {
     const userData = localStorage.getItem("user")
@@ -101,74 +126,76 @@ export default function DriverDashboard() {
         .single()
 
       if (driverError) {
-        console.error("Driver error:", driverError)
+        console.error("Driver fetch error:", driverError)
         throw driverError
       }
       setDriver(driverData)
 
       const { data: ridesData, error: ridesError } = await supabase
         .from("rides")
-        .select("*")
+        .select("*, is_ride_completed") // Select the new column
         .eq("driver_id", driverData.id)
         .order("created_at", { ascending: false })
 
       if (ridesError) {
-        console.error("Rides error:", ridesError)
+        console.error("Rides fetch error:", ridesError)
         throw ridesError
       }
       setRides(ridesData || [])
 
-      // Fetch bookings for earnings calculation - FIXED VERSION
+      // Fetch bookings for earnings calculation and summary
+      // Improved error logging for bookings fetch
       const { data: bookingsData, error: bookingsError } = await supabase
         .from("bookings")
         .select(`
           *,
+          users (phone),
           rides!inner(
             id,
             driver_id,
             price,
-            status
+            status,
+            is_ride_completed
           )
-        `)
+        `) // Removed the comment from here
         .eq("rides.driver_id", driverData.id)
-        .in("status", ["confirmed", "completed"]) // Only confirmed and completed bookings
+        .eq("rides.is_ride_completed", true); // Filter by is_ride_completed for earnings
 
       if (bookingsError) {
-        console.error("Bookings error:", bookingsError)
+        console.error("Bookings fetch error detailed:", bookingsError); // Log full error object
+        // You might want to show an alert here as well, or handle specific error codes
+        // alert(`Failed to fetch bookings: ${bookingsError.message || 'Unknown error'}`);
       } else {
-        // Calculate total earnings from confirmed/completed bookings on NON-CANCELLED rides only
+        // Calculate total earnings only from rides that are marked as completed
         const earnings = (bookingsData || []).reduce((total, booking) => {
-          // Only add earnings if the ride is not cancelled
-          if (booking.rides.status !== "cancelled") {
+          if (booking.rides && booking.rides.is_ride_completed === true) {
             return total + (booking.seats_booked * booking.rides.price)
           }
           return total
         }, 0)
         setTotalEarnings(earnings)
 
-        // Calculate earnings per ride - FIXED VERSION
+        // Calculate earnings per ride - only for completed rides
         const rideEarningsMap: Record<string, number> = {}
-        
+
         // Initialize all rides with 0 earnings first
         ;(ridesData || []).forEach(ride => {
           rideEarningsMap[ride.id] = 0
         })
-        
-        // Add earnings only for NON-CANCELLED rides
+
+        // Add earnings only for rides where is_ride_completed is true
         ;(bookingsData || []).forEach(booking => {
-          const rideId = booking.rides.id
-          // Only add earnings if the ride is not cancelled
-          if (booking.rides.status !== "cancelled") {
-            rideEarningsMap[rideId] += booking.seats_booked * booking.rides.price
+          const rideId = booking.ride_id
+          if (booking.rides && booking.rides.is_ride_completed === true) {
+            rideEarningsMap[rideId] = (rideEarningsMap[rideId] || 0) + (booking.seats_booked * booking.rides.price)
           }
         })
-        
         setRideEarnings(rideEarningsMap)
       }
-
-      setBookings([])
     } catch (error) {
       console.error("Error fetching driver data:", error)
+      // Generic error for the entire fetch operation
+      alert("Failed to load dashboard data. Please refresh the page.")
     } finally {
       setLoading(false)
     }
@@ -188,6 +215,7 @@ export default function DriverDashboard() {
           total_seats: Number.parseInt(newRide.total_seats),
           available_seats: Number.parseInt(newRide.total_seats),
           departure_time: newRide.departure_time,
+          is_ride_completed: null, // Set to null on creation
         },
       ])
 
@@ -209,14 +237,59 @@ export default function DriverDashboard() {
     }
   }
 
+  const handleCompleteRide = async (rideId: string) => {
+    if (!confirm("Are you sure you want to mark this ride as completed?")) {
+      return
+    }
+
+    try {
+      // 1. Update ride status and is_ride_completed
+      const { error: rideUpdateError } = await supabase
+        .from("rides")
+        .update({ status: "completed", is_ride_completed: true })
+        .eq("id", rideId)
+
+      if (rideUpdateError) throw rideUpdateError
+
+      // 2. Increment completed_rides for the driver
+      if (driver) {
+        const { data: currentDriverData, error: driverFetchError } = await supabase
+          .from("drivers")
+          .select("completed_rides")
+          .eq("id", driver.id)
+          .single()
+
+        if (driverFetchError) throw driverFetchError
+
+        const newCompletedRides = (currentDriverData?.completed_rides || 0) + 1
+
+        const { error: driverUpdateError } = await supabase
+          .from("drivers")
+          .update({ completed_rides: newCompletedRides })
+          .eq("id", driver.id)
+
+        if (driverUpdateError) throw driverUpdateError
+      }
+
+      fetchDriverData(user.id)
+      alert("Ride marked as completed and driver stats updated!")
+    } catch (error) {
+      console.error("Error completing ride:", error)
+      alert("Failed to complete ride. Please try again.")
+    }
+  }
+
   const handleCancelRide = async (rideId: string) => {
     if (!confirm("Are you sure you want to cancel this ride? This action cannot be undone.")) {
       return
     }
 
     try {
-      // Cancel the ride
-      const { error: rideError } = await supabase.from("rides").update({ status: "cancelled" }).eq("id", rideId)
+      // Cancel the ride and set is_ride_completed to false (incomplete)
+      const { error: rideError } = await supabase
+        .from("rides")
+        .update({ status: "cancelled", is_ride_completed: false }) // Mark as incomplete
+        .eq("id", rideId)
 
       if (rideError) throw rideError
 
@@ -240,13 +313,82 @@ export default function DriverDashboard() {
     }
   }
 
+  const handleEditRideClick = (ride: Ride) => {
+    setEditingRide(ride)
+    setEditedRideDetails({
+      price: ride.price.toString(),
+      // Removed available_seats from state update
+    })
+    setShowEditRideDialog(true)
+  }
+
+  const handleEditRideSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingRide) return
+
+    try {
+      const updatedPrice = Number.parseFloat(editedRideDetails.price)
+      // Removed available_seats from update
+
+      if (isNaN(updatedPrice)) { // Only check price validity now
+        alert("Please enter a valid number for price.")
+        return
+      }
+
+      const { error } = await supabase
+        .from("rides")
+        .update({
+          price: updatedPrice,
+          // Removed available_seats from update object
+        })
+        .eq("id", editingRide.id)
+
+      if (error) throw error
+
+      setShowEditRideDialog(false)
+      setEditingRide(null)
+      fetchDriverData(user.id)
+      alert("Ride updated successfully!")
+    } catch (error) {
+      console.error("Error updating ride:", error)
+      alert("Failed to update ride. Please try again.")
+    }
+  }
+
+  const handleShowBookingSummary = async (rideId: string) => {
+    try {
+      // Improved error logging for booking summary fetch
+      const { data: bookingsSummary, error } = await supabase
+        .from("bookings")
+        .select(`
+          id,
+          seats_booked,
+          status,
+          users (phone)
+        `) // Removed the comment from here
+        .eq("ride_id", rideId)
+        .in("status", ["confirmed", "completed"]) // Only show confirmed/completed bookings
+
+      if (error) {
+        console.error("Booking summary fetch error detailed:", error); // Log full error object
+        throw error; // Re-throw to be caught by the outer catch block
+      }
+
+      setSelectedRideBookings(bookingsSummary || [])
+      setShowBookingSummaryDialog(true)
+    } catch (error) {
+      console.error("Error fetching booking summary:", error)
+      alert("Failed to fetch booking summary. Please check console for details.")
+    }
+  }
+
   const handleSOS = async () => {
     setSosActive(true)
     try {
       const { error } = await supabase.from("sos_alerts").insert([
         {
           driver_id: driver?.id,
-          location: "Current Location",
+          location: "Current Location", // In a real app, this would be a dynamic location
           status: "active",
         },
       ])
@@ -268,7 +410,7 @@ export default function DriverDashboard() {
   try {
     // First check if review already exists
     const { data: existingReview, error: checkError } = await supabase
-      .from("driver_reviews")
+      .from("driver_reviews") // Assuming driver_reviews is the correct table
       .select("id")
       .eq("booking_id", selectedCustomer.id)
       .single()
@@ -301,8 +443,8 @@ export default function DriverDashboard() {
     setReviewText("")
     setRating(5)
     alert("Review submitted successfully!")
-    
-    // Refresh bookings to update UI
+
+    // Refresh data to update any related stats (like driver ratings in future)
     fetchDriverData(user.id)
   } catch (error) {
     console.error("Error submitting review:", error)
@@ -413,7 +555,7 @@ export default function DriverDashboard() {
                 <IndianRupee className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">₹{totalEarnings}</div>
+                <div className="text-2xl font-bold">₹{totalEarnings.toLocaleString()}</div>
               </CardContent>
             </Card>
             <Card>
@@ -565,7 +707,7 @@ export default function DriverDashboard() {
                                 </div>
                                 <div className="flex items-center space-x-1">
                                   <IndianRupee className="h-4 w-4" />
-                                  <span>₹{ride.price} per seat</span>
+                                  <span>{ride.price} per seat</span>
                                 </div>
                               </div>
                             </div>
@@ -587,7 +729,7 @@ export default function DriverDashboard() {
                             </p>
                             <p>
                               <strong>Earnings:</strong>{" "}
-                              ₹{ride.status === "cancelled" ? 0 : (rideEarnings[ride.id] || 0)}
+                              ₹{ride.is_ride_completed ? (rideEarnings[ride.id] || 0).toLocaleString() : 0}
                             </p>
                             {ride.status === "cancelled" && (
                               <p className="text-red-600 text-xs mt-1">
@@ -596,10 +738,24 @@ export default function DriverDashboard() {
                             )}
                             <div className="flex space-x-2 mt-3">
                               {ride.status === "active" && (
-                                <Button size="sm" variant="destructive" onClick={() => handleCancelRide(ride.id)}>
-                                  Cancel Ride
-                                </Button>
+                                <>
+                                  <Button size="sm" onClick={() => handleCompleteRide(ride.id)}>
+                                    <CheckCircle className="h-4 w-4 mr-1" />
+                                    Mark Completed
+                                  </Button>
+                                  <Button size="sm" variant="destructive" onClick={() => handleCancelRide(ride.id)}>
+                                    Cancel Ride
+                                  </Button>
+                                  <Button size="sm" variant="outline" onClick={() => handleEditRideClick(ride)}>
+                                    <Edit className="h-4 w-4 mr-1" />
+                                    Edit
+                                  </Button>
+                                </>
                               )}
+                              <Button size="sm" variant="outline" onClick={() => handleShowBookingSummary(ride.id)}>
+                                <Eye className="h-4 w-4 mr-1" />
+                                View Bookings
+                              </Button>
                             </div>
                           </div>
                         </div>
@@ -680,6 +836,69 @@ export default function DriverDashboard() {
           </Tabs>
         </div>
       </div>
+
+      {/* Edit Ride Dialog */}
+      <Dialog open={showEditRideDialog} onOpenChange={setShowEditRideDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit Ride Details</DialogTitle>
+            <DialogDescription>
+              Make changes to the ride price. Click save when you're done.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleEditRideSubmit} className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-price" className="text-right">
+                Price (₹)
+              </Label>
+              <Input
+                id="edit-price"
+                type="number"
+                value={editedRideDetails.price}
+                onChange={(e) => setEditedRideDetails({ ...editedRideDetails, price: e.target.value })}
+                className="col-span-3"
+                required
+              />
+            </div>
+            {/* Removed available_seats input field */}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setShowEditRideDialog(false)}>Cancel</Button>
+              <Button type="submit">Save changes</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Booking Summary Dialog */}
+      <Dialog open={showBookingSummaryDialog} onOpenChange={setShowBookingSummaryDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Booking Summary</DialogTitle>
+            <DialogDescription>Details of confirmed bookings for this ride.</DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {selectedRideBookings.length === 0 ? (
+              <p className="text-muted-foreground">No confirmed bookings for this ride yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {selectedRideBookings.map((booking) => (
+                  <div key={booking.id} className="flex justify-between items-center border-b pb-2 last:border-b-0 last:pb-0">
+                    <div className="flex items-center gap-2">
+                      <Phone className="h-4 w-4 text-primary" />
+                      {/* Fixed: Changed booking.user.phone to booking.users.phone */}
+                      <span className="font-medium">{booking.users.phone}</span> 
+                    </div>
+                    <Badge variant="secondary">{booking.seats_booked} Seats</Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={() => setShowBookingSummaryDialog(false)}>Close</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
