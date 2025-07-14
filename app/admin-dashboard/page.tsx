@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Users, Car, CheckCircle, XCircle, Clock, Ban, Eye, TrendingUp, DollarSign, Star, AlertTriangle, BarChart3, PieChart } from "lucide-react"
+import { Users, Car, CheckCircle, XCircle, Clock, Ban, Eye, TrendingUp, DollarSign, Star, AlertTriangle, BarChart3, PieChart, Route, Calendar, Tag, Info } from "lucide-react"
 import { Navbar } from "@/components/navbar"
 
 interface Driver {
@@ -53,7 +53,7 @@ interface Booking {
   status: string
   created_at: string
   updated_at: string
-  rides?: { driver_id: string; is_ride_completed: boolean | null }; // Added is_ride_completed here for joined data
+  rides?: { driver_id: string; is_ride_completed: boolean | null };
 }
 
 interface Ride {
@@ -68,7 +68,7 @@ interface Ride {
   status: string
   created_at: string
   updated_at: string
-  is_ride_completed: boolean | null; // Changed from is_fee_approved
+  is_ride_completed: boolean | null;
   fee_status: string;
 }
 
@@ -103,7 +103,8 @@ export default function EnhancedAdminDashboard() {
   })
   const [monthlyRevenue, setMonthlyRevenue] = useState<Record<string, number>>({})
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null)
-  const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [selectedUser, setSelectedUser] = useState<User | null>(null) // Fixed: Initialized with null
+  const [selectedRide, setSelectedRide] = useState<Ride | null>(null)
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
 
@@ -125,7 +126,7 @@ export default function EnhancedAdminDashboard() {
 
     setUser(parsedUser)
     fetchData()
-  }, []) // Empty dependency array for initial fetch on mount
+  }, [])
 
   const fetchData = async () => {
     try {
@@ -147,7 +148,6 @@ export default function EnhancedAdminDashboard() {
         .order("created_at", { ascending: false })
       if (usersError) throw usersError
 
-      // Fetch bookings with ride details including is_ride_completed
       const { data: bookingsData, error: bookingsError } = await supabase
         .from("bookings")
         .select(`
@@ -156,10 +156,10 @@ export default function EnhancedAdminDashboard() {
         `)
       if (bookingsError) throw bookingsError
 
-      // Fetch rides separately to get all ride statuses including is_ride_completed
       const { data: ridesData, error: ridesError } = await supabase
         .from("rides")
         .select("*")
+        .order("created_at", { ascending: false })
       if (ridesError) throw ridesError
 
       const { data: reviewsData, error: reviewsError } = await supabase
@@ -183,7 +183,6 @@ export default function EnhancedAdminDashboard() {
     }
   }
 
-  // Use useMemo to memoize calculated stats and derived drivers
   const { calculatedDrivers, overallStats, calculatedMonthlyRevenue } = useMemo(() => {
     const totalUsers = users.filter(u => u.role === "user").length
     const totalDrivers = drivers.length
@@ -193,21 +192,16 @@ export default function EnhancedAdminDashboard() {
     const bannedUsers = users.filter(u => u.is_banned).length
     const totalBookings = bookings.length
 
-    // Calculate total revenue only for rides that are marked as completed
     let totalRevenue = 0;
     bookings.forEach(booking => {
-      // Find the corresponding ride for the booking
       const ride = rides.find(r => r.id === booking.ride_id);
       if (ride && ride.is_ride_completed === true) {
         totalRevenue += booking.total_price;
       }
     });
 
-    // Calculate completed rides based on the new 'is_ride_completed' column
     const completedRides = rides.filter(r => r.is_ride_completed === true).length;
 
-
-    // Calculate average rating and total reviews for each driver from the reviews table
     const driverReviewsMap: { [key: string]: { totalRating: number; count: number } } = {}
 
     reviews.forEach(review => {
@@ -231,15 +225,12 @@ export default function EnhancedAdminDashboard() {
       };
     });
 
-    // Calculate overall average rating based on the updated driver ratings
     const overallAverageRating = updatedDrivers.length > 0
       ? updatedDrivers.reduce((sum, d) => sum + (d.rating || 0), 0) / updatedDrivers.length
       : 0;
 
-    // Calculate monthly revenue
     const monthlyRev: Record<string, number> = {}
     bookings.forEach(booking => {
-        // Only include completed rides in monthly revenue
         const ride = rides.find(r => r.id === booking.ride_id);
         if (ride && ride.is_ride_completed === true) {
             const date = new Date(booking.created_at)
@@ -264,14 +255,12 @@ export default function EnhancedAdminDashboard() {
       },
       calculatedMonthlyRevenue: monthlyRev
     };
-  }, [drivers, users, bookings, rides, reviews]); // Dependencies for useMemo
+  }, [drivers, users, bookings, rides, reviews]);
 
-  // Update states only when the memoized values change
   useEffect(() => {
     setStats(overallStats);
     setMonthlyRevenue(calculatedMonthlyRevenue);
   }, [overallStats, calculatedMonthlyRevenue]);
-
 
   const handleDriverAction = async (driverId: string, action: string) => {
     if (processingIds.has(driverId)) return
@@ -371,17 +360,19 @@ export default function EnhancedAdminDashboard() {
     value: string | number
     icon: any
     color?: string
-  }) => (
-    <Card className="hover:shadow-md transition-shadow">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <Icon className={`h-4 w-4 ${color}`} />
-      </CardHeader>
-      <CardContent>
-        <div className={`text-2xl font-bold ${color}`}>{value}</div>
-      </CardContent>
-    </Card>
-  )
+  }) => {
+    return (
+      <Card className="hover:shadow-md transition-shadow">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">{title}</CardTitle>
+          <Icon className={`h-4 w-4 ${color}`} />
+        </CardHeader>
+        <CardContent>
+          <div className={`text-2xl font-bold ${color}`}>{value}</div>
+        </CardContent>
+      </Card>
+    )
+  }
 
   const DriverCard = ({ driver }: { driver: Driver }) => (
     <div className="border rounded-lg p-4 sm:p-6 hover:shadow-md transition-shadow">
@@ -609,6 +600,80 @@ export default function EnhancedAdminDashboard() {
     </div>
   )
 
+  const RideCard = ({ ride }: { ride: Ride }) => {
+    const driver = drivers.find(d => d.id === ride.driver_id);
+    const driverPhone = driver ? driver.users.phone : 'N/A';
+    const driverName = driver ? `${driver.car_make} ${driver.car_model}` : 'N/A';
+
+    return (
+      <div className="border rounded-lg p-4 sm:p-6 hover:shadow-md transition-shadow">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
+          <div className="flex-1">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 mb-3">
+              <div>
+                <h3 className="font-semibold text-lg">Ride ID: {ride.id.substring(0, 8)}...</h3>
+                <p className="text-sm text-muted-foreground">Driver: {driverName} ({driverPhone})</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {ride.is_ride_completed === true && <Badge className="bg-green-600">Completed</Badge>}
+                {ride.is_ride_completed === false && <Badge variant="destructive">Cancelled</Badge>}
+                {ride.is_ride_completed === null && <Badge variant="secondary">Ongoing/Scheduled</Badge>}
+                <Badge variant="outline">Status: {ride.status}</Badge>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm mb-4">
+              <div>
+                <p><strong>From:</strong> {ride.from_location}</p>
+                <p><strong>To:</strong> {ride.to_location}</p>
+                <p><strong>Departure:</strong> {new Date(ride.departure_time).toLocaleString()}</p>
+              </div>
+              <div>
+                <p><strong>Price:</strong> ₹{ride.price.toLocaleString()}</p>
+                <p><strong>Seats:</strong> {ride.available_seats}/{ride.total_seats} available</p>
+                <p><strong>Fee Status:</strong> {ride.fee_status}</p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Dialog>
+                <DialogTrigger asChild onClick={() => setSelectedRide(ride)}>
+                  <Button size="sm" variant="outline">
+                    <Eye className="h-4 w-4 mr-1" />
+                    View Details
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Ride Details</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="font-semibold text-lg">Ride ID: {ride.id}</h3>
+                      <p className="text-muted-foreground">Driver: {driverName} ({driverPhone})</p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="flex items-center gap-2"><Route className="h-4 w-4" /><strong>Route:</strong> {ride.from_location} to {ride.to_location}</p>
+                      <p className="flex items-center gap-2"><Calendar className="h-4 w-4" /><strong>Departure:</strong> {new Date(ride.departure_time).toLocaleString()}</p>
+                      <p className="flex items-center gap-2"><DollarSign className="h-4 w-4" /><strong>Price per seat:</strong> ₹{ride.price.toLocaleString()}</p>
+                      <p className="flex items-center gap-2"><Users className="h-4 w-4" /><strong>Seats:</strong> {ride.available_seats} of {ride.total_seats} available</p>
+                      <p className="flex items-center gap-2"><Info className="h-4 w-4" /><strong>Status:</strong> {ride.status}</p>
+                      <p className="flex items-center gap-2"><CheckCircle className="h-4 w-4" /><strong>Ride Completed:</strong> {ride.is_ride_completed === true ? 'Yes' : ride.is_ride_completed === false ? 'No' : 'N/A'}</p>
+                      <p className="flex items-center gap-2"><Tag className="h-4 w-4" /><strong>Fee Status:</strong> {ride.fee_status}</p>
+                      <p className="flex items-center gap-2"><Clock className="h-4 w-4" /><strong>Created At:</strong> {new Date(ride.created_at).toLocaleString()}</p>
+                      <p className="flex items-center gap-2"><Clock className="h-4 w-4" /><strong>Last Updated:</strong> {new Date(ride.updated_at).toLocaleString()}</p>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar
@@ -619,6 +684,7 @@ export default function EnhancedAdminDashboard() {
         links={[
           { href: "#", label: "Drivers", onClick: () => setActiveTab("drivers") },
           { href: "#", label: "Customers", onClick: () => setActiveTab("users") },
+          { href: "#", label: "Rides", onClick: () => setActiveTab("rides") },
           { href: "#", label: "Analytics", onClick: () => setActiveTab("analytics") },
         ]}
       />
@@ -641,9 +707,10 @@ export default function EnhancedAdminDashboard() {
         </div>
 
         <Tabs defaultValue="drivers" value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="drivers">Drivers ({stats.totalDrivers})</TabsTrigger>
             <TabsTrigger value="users">Customers ({stats.totalUsers})</TabsTrigger>
+            <TabsTrigger value="rides">Rides ({rides.length})</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
           </TabsList>
 
@@ -742,6 +809,28 @@ export default function EnhancedAdminDashboard() {
             </Card>
           </TabsContent>
 
+          <TabsContent value="rides">
+            <Card>
+              <CardHeader>
+                <CardTitle>Ride Management</CardTitle>
+                <CardDescription>View and manage all ride information</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="text-center py-8">Loading rides...</div>
+                ) : rides.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">No rides available.</div>
+                ) : (
+                  <div className="space-y-4 mt-6">
+                    {rides.map(ride => (
+                      <RideCard key={ride.id} ride={ride} />
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="analytics">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
@@ -781,7 +870,7 @@ export default function EnhancedAdminDashboard() {
                     {Object.keys(monthlyRevenue).length > 0 ? (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {Object.entries(monthlyRevenue)
-                          .sort(([month, _]) => month.localeCompare(month)) // Sort keys to ensure consistent order
+                          .sort(([month, _]) => month.localeCompare(month))
                           .map(([month, revenue]) => (
                             <div key={month} className="flex justify-between items-center bg-gray-50 p-3 rounded-md">
                               <span className="text-sm text-muted-foreground">{month}</span>
