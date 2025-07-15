@@ -1,3 +1,4 @@
+// navbar.tsx
 "use client"
 
 import { useState } from "react"
@@ -6,10 +7,46 @@ import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Menu, X, Sun, Moon } from "lucide-react"
 import { useTheme } from "next-themes"
+import { useRouter } from "next/navigation"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
-export function Navbar() {
+interface NavbarProps {
+  title?: string;
+  logoSrc?: string;
+  onLogout: () => void;
+  showGetStarted: boolean;
+  links: { href: string; label: string; onClick?: () => void }[];
+  user: any; // Add user prop to receive user data
+}
+
+export function Navbar({ onLogout, user, showGetStarted }: NavbarProps) {
   const [isOpen, setIsOpen] = useState(false)
   const { theme, setTheme } = useTheme()
+  const router = useRouter()
+  const [showLoginAlert, setShowLoginAlert] = useState(false) // State for login alert
+
+  const handleDashboardClick = () => {
+    if (user) {
+      if (user.role === "admin") {
+        router.push("/admin-dashboard")
+      } else if (user.role === "driver") {
+        router.push("/driver-dashboard")
+      } else if (user.role === "user") {
+        router.push("/user-dashboard")
+      }
+    } else {
+      setShowLoginAlert(true) // Show alert if not logged in
+    }
+    setIsOpen(false) // Close mobile menu after click
+  }
 
   return (
     <nav className="fixed top-0 w-full z-50 bg-background/80 backdrop-blur-md border-b">
@@ -34,12 +71,32 @@ export function Navbar() {
               >
                 Find Rides
               </Link>
-              <Link
-                href="/auth"
+              {/* Dashboard Button */}
+              <Button
+                variant="ghost"
                 className="text-foreground hover:text-primary px-3 py-2 rounded-md text-sm font-medium"
+                onClick={handleDashboardClick}
               >
-                Login
-              </Link>
+                Dashboard
+              </Button>
+
+              {/* Conditionally render Login/Logout */}
+              {!user ? (
+                <Link
+                  href="/auth"
+                  className="text-foreground hover:text-primary px-3 py-2 rounded-md text-sm font-medium"
+                >
+                  Login
+                </Link>
+              ) : (
+                <Button
+                  variant="ghost"
+                  className="text-foreground hover:text-primary px-3 py-2 rounded-md text-sm font-medium"
+                  onClick={onLogout}
+                >
+                  Logout
+                </Button>
+              )}
             </div>
           </div>
 
@@ -49,9 +106,11 @@ export function Navbar() {
               <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
               <span className="sr-only">Toggle theme</span>
             </Button>
-            <Button asChild>
-              <Link href="/auth">Get Started</Link>
-            </Button>
+            {showGetStarted && (
+              <Button asChild>
+                <Link href="/auth">Get Started</Link>
+              </Button>
+            )}
           </div>
 
           {/* Mobile menu button */}
@@ -85,23 +144,61 @@ export function Navbar() {
             >
               Find Rides
             </Link>
-            <Link
-              href="/auth"
-              className="text-foreground hover:text-primary block px-3 py-2 rounded-md text-base font-medium"
-              onClick={() => setIsOpen(false)}
+            {/* Dashboard Button (styled like a link) for Mobile */}
+            <Button
+              variant="ghost"
+              className="text-foreground hover:text-primary block px-3 py-2 rounded-md text-base font-medium w-full text-left"
+              onClick={handleDashboardClick}
             >
-              Login
-            </Link>
-            <div className="px-3 py-2">
-              <Button asChild className="w-full">
-                <Link href="/auth" onClick={() => setIsOpen(false)}>
-                  Get Started
-                </Link>
+              Dashboard
+            </Button>
+            {/* Conditionally render Login/Logout for Mobile */}
+            {!user ? (
+              <Link
+                href="/auth"
+                className="text-foreground hover:text-primary block px-3 py-2 rounded-md text-base font-medium"
+                onClick={() => setIsOpen(false)}
+              >
+                Login
+              </Link>
+            ) : (
+              <Button
+                variant="ghost"
+                className="text-foreground hover:text-primary block px-3 py-2 rounded-md text-base font-medium w-full text-left"
+                onClick={() => { onLogout(); setIsOpen(false); }}
+              >
+                Logout
               </Button>
-            </div>
+            )}
+            {showGetStarted && (
+              <div className="px-3 py-2">
+                <Button asChild className="w-full">
+                  <Link href="/auth" onClick={() => setIsOpen(false)}>
+                    Get Started
+                  </Link>
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       )}
+
+      {/* Login Alert Dialog */}
+      <AlertDialog open={showLoginAlert} onOpenChange={setShowLoginAlert}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Login Required</AlertDialogTitle>
+            <AlertDialogDescription>
+              You need to be logged in to access the dashboard.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => { setShowLoginAlert(false); router.push("/auth"); }}>
+              Go to Login
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </nav>
   )
 }

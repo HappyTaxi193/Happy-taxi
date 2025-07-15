@@ -1,7 +1,8 @@
+// page.tsx (for the /rides route)
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, useRouter } from "next/navigation" // Import useRouter
 import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -69,12 +70,20 @@ export default function RidesPage() {
   const [showFilters, setShowFilters] = useState(false)
 
   const searchParams = useSearchParams()
+  const router = useRouter() // Initialize useRouter
 
   useEffect(() => {
     // Get user from localStorage
     const userData = localStorage.getItem("user")
     if (userData) {
-      setUser(JSON.parse(userData))
+      try {
+        const parsedUser = JSON.parse(userData)
+        setUser(parsedUser)
+      } catch (error) {
+        console.error("Error parsing user data from localStorage:", error)
+        // Handle corrupted localStorage data, e.g., clear it
+        localStorage.removeItem("user")
+      }
     }
 
     // Get search parameters from URL
@@ -350,9 +359,28 @@ export default function RidesPage() {
     ))
   }
 
+  // --- Start of added/modified Navbar related functions ---
+  const handleLogout = () => {
+    localStorage.removeItem("user") // Clear user data from localStorage
+    setUser(null) // Clear user state
+    alert("Logged out successfully!") // Provide feedback to the user
+    router.push("/") // Redirect to home or login page after logout
+  }
+  // --- End of added/modified Navbar related functions ---
+
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
+      {/* Updated Navbar call */}
+      <Navbar
+        user={user} // Pass the user object to Navbar
+        onLogout={handleLogout} // Pass the logout function
+        showGetStarted={!user} // Show "Get Started" only if not logged in
+        links={[
+          { href: "/", label: "Home" },
+          { href: "/rides", label: "Find Rides" },
+          // The "Dashboard" link logic is handled internally by Navbar based on `user.role`
+        ]}
+      />
       <br /><br />
       <div className="pt-16 sm:pt-20 pb-8 sm:pb-12">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8">

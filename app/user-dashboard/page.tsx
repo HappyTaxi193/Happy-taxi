@@ -1,3 +1,4 @@
+// page.tsx (Customer Dashboard)
 "use client"
 
 import { useEffect, useState } from "react"
@@ -60,6 +61,8 @@ export default function UserDashboard() {
     }
 
     const parsedUser = JSON.parse(userData)
+    // This check ensures only 'user' role can access this specific dashboard.
+    // If you're logged in as admin/driver, you'll be redirected here.
     if (parsedUser.role !== "user") {
       router.push("/auth")
       return
@@ -109,7 +112,7 @@ export default function UserDashboard() {
 
   const handleLogout = () => {
     localStorage.removeItem("user")
-    router.push("/")
+    router.push("/") // Redirect to home after logout
   }
 
   const handleSOS = (bookingId: string) => {
@@ -156,6 +159,7 @@ export default function UserDashboard() {
       
       alert("Review submitted successfully!")
       closeReviewModal()
+      fetchBookings(user.id) // Refresh bookings to show review status
     } catch (error) {
       console.error("Error submitting review:", error)
       alert("Failed to submit review. Please try again.")
@@ -173,6 +177,7 @@ export default function UserDashboard() {
       const seatDifference = editSeats - selectedBooking.seats_booked
       if (seatDifference > 0 && seatDifference > selectedBooking.ride.available_seats) {
         alert("Not enough seats available for this booking.")
+        setProcessingAction(false) // Reset processing action
         return
       }
 
@@ -279,11 +284,23 @@ export default function UserDashboard() {
     .filter(booking => booking.status === "confirmed")
     .reduce((sum, booking) => sum + booking.total_price, 0)
 
+  // If user is null, meaning not logged in or role is not "user", return null
+  // This ensures the dashboard content doesn't render until user data is loaded correctly
   if (!user) return null
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
+      <Navbar
+        user={user} // Pass the user object to Navbar
+        onLogout={handleLogout} // Pass the logout function
+        showGetStarted={false} // Adjust as needed, typically false for logged-in users
+        links={[
+          // You can define specific links for the user dashboard navbar here
+          { href: "/", label: "Home" },
+          { href: "/rides", label: "Find Rides" },
+          // The "Dashboard" link logic is handled internally by Navbar based on `user.role`
+        ]}
+      />
       <div className="pt-20 pb-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center mb-8">
