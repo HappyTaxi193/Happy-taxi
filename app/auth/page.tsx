@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Upload, User, Car, AlertCircle, X, Check } from "lucide-react"
+import { Upload, User, Car, AlertCircle, X, Check, Gavel } from "lucide-react" // Added Gavel icon
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
@@ -73,6 +73,35 @@ export default function AuthPage() {
       const result = await authenticateUser(phone, password)
 
       if (result.success && result.user) {
+        // Check if the user is banned from the users table
+        if (result.user.is_banned) {
+          setError("Your account has been banned. You will be redirected.")
+          setTimeout(() => router.push("/banned"), 1500) // Redirect to the banned page
+          return // Stop further processing
+        }
+
+        // NEW: If the user is a driver, check the drivers table for their ban status
+        if (result.user.role === "driver") {
+          const { data: driverProfile, error: driverError } = await supabase
+            .from("drivers")
+            .select("is_banned")
+            .eq("user_id", result.user.id)
+            .single()
+
+          if (driverError) {
+            console.error("Error fetching driver profile:", driverError)
+            setError("Login failed: Could not retrieve driver status.")
+            setLoading(false)
+            return
+          }
+
+          if (driverProfile && driverProfile.is_banned) {
+            setError("Your driver account has been banned. You will be redirected.")
+            setTimeout(() => router.push("/banned"), 1500)
+            return
+          }
+        }
+
         localStorage.setItem("user", JSON.stringify(result.user))
         setSuccess("Login successful! Redirecting...")
 
@@ -125,6 +154,13 @@ export default function AuthPage() {
           return
         }
         throw new Error(result.error)
+      }
+
+      // Check if the newly created user (or an existing one if phone conflict occurs) is banned
+      if (result.user && result.user.is_banned) {
+        setError("Your account has been banned. You will be redirected.")
+        setTimeout(() => router.push("/banned"), 1500) // Redirect to the banned page
+        return // Stop further processing
       }
 
       if (role === "driver" && result.user) {
