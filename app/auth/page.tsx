@@ -16,7 +16,7 @@ import { Upload, User, Car, AlertCircle, X, Check, Gavel } from "lucide-react" /
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
-import { authenticateUser, createUser, ADMIN_CREDENTIALS, TEST_CREDENTIALS, TEST_DRIVER_CREDENTIALS } from "@/lib/auth"
+import { authenticateUser, createUser} from "@/lib/auth"
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true)

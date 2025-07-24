@@ -119,20 +119,4 @@ export async function createUser(phone: string, password: string, role: "user" |
   }
 }
 
-// Admin credentials
-export const ADMIN_CREDENTIALS = {
-  phone: "+91 99999 99999",
-  password: "admin123",
-}
 
-// Test credentials
-export const TEST_CREDENTIALS = {
-  phone: "+91 98765 43210",
-  password: "test123",
-}
-
-// Test driver credentials
-export const TEST_DRIVER_CREDENTIALS = {
-  phone: "+91 98765 54321",
-  password: "driver123",
-}
