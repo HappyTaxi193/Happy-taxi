@@ -10,7 +10,7 @@ export function Footer() {
           {/* Brand */}
           <div className="col-span-1 md:col-span-2">
             <Link href="/" className="flex items-center space-x-2 mb-4">
-              <Image src="/WhatsApp Image 2025-07-10 at 3.42.37 PM.jpeg" alt="HappyTaxi" width={40} height={40} className="rounded-lg" />
+              <Image src="/htcab-haridwar-best-taxi-service-logo.jpg" alt="HappyTaxi" width={40} height={40} className="rounded-lg" />
               <span className="text-xl font-bold text-primary">HappyTaxi</span>
             </Link>
             <p className="text-muted-foreground mb-4 max-w-md">

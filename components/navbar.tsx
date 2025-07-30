@@ -54,7 +54,7 @@ export function Navbar({ onLogout, user, showGetStarted }: NavbarProps) {
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center">
             <Link href="/" className="flex items-center space-x-2">
-              <Image src="/WhatsApp Image 2025-07-10 at 3.42.37 PM.jpeg" alt="HappyTaxi" width={40} height={40} className="rounded-lg" />
+              <Image src="/htcab-haridwar-best-taxi-service-logo.jpg" alt="HappyTaxi" width={40} height={40} className="rounded-lg" />
               <span className="text-xl font-bold text-primary">HappyTaxi</span>
             </Link>
           </div>
