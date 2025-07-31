@@ -8,7 +8,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://htcab.in'),
+  metadataBase: new URL('https://happy-taxi-full-stack.vercel.app'),
   title: "HTCab Haridwar - Best Taxi Service | Book Cabs Online in Haridwar",
   description: "HTCab Haridwar offers reliable taxi services, cab booking, and tour packages in Haridwar. 24/7 available, verified drivers, affordable rates. Book temple tours, airport transfers & outstation trips.",
   keywords: [
@@ -46,7 +46,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'en_IN',
-    url: 'https://htcab.in',
+    url: 'https://happy-taxi-full-stack.vercel.app',
     siteName: 'HTCab Haridwar',
     title: 'HTCab Haridwar - Best Taxi Service | Book Cabs Online in Haridwar',
     description: 'HTCab Haridwar offers reliable taxi services, cab booking, and tour packages in Haridwar. 24/7 available, verified drivers, affordable rates.',
@@ -68,7 +68,7 @@ export const metadata: Metadata = {
   },
   
   alternates: {
-    canonical: 'https://htcab.in',
+    canonical: 'https://happy-taxi-full-stack.vercel.app',
   },
   
   other: {
@@ -91,22 +91,22 @@ const structuredData = {
   "@graph": [
     {
       "@type": "TaxiService",
-      "@id": "https://htcab.in/#taxiservice",
+      "@id": "https://happy-taxi-full-stack.vercel.app/#taxiservice",
       "name": "Happy Taxi Service",
       "alternateName": ["HTCab", "Happy Taxi Haridwar", "HTCab Haridwar"],
       "description": "Premium taxi service in Haridwar offering cab booking, temple tours, airport transfers, and outstation trips with verified drivers and 24/7 availability. No advance payment required - pay after trip completion.",
-      "url": "https://htcab.in",
+      "url": "https://happy-taxi-full-stack.vercel.app",
       "telephone": "+91-9760764682", 
       "email": "rashmijoshi193@gmail.com", 
       "image": {
         "@type": "ImageObject",
-        "url": "https://htcab.in/htcab-haridwar-best-taxi-service-logo.jpg", 
+        "url": "https://happy-taxi-full-stack.vercel.app/htcab-haridwar-best-taxi-service-logo.jpg", 
         "width": 300,
         "height": 300
       },
       "logo": {
         "@type": "ImageObject",
-        "url": "https://htcab.in/htcab-haridwar-best-taxi-service-logo.jpg", 
+        "url": "https://happy-taxi-full-stack.vercel.app/htcab-haridwar-best-taxi-service-logo.jpg", 
         "width": 300,
         "height": 300
       },
@@ -224,9 +224,9 @@ const structuredData = {
     },
     {
       "@type": "LocalBusiness",
-      "@id": "https://htcab.in/#localbusiness",
+      "@id": "https://happy-taxi-full-stack.vercel.app/#localbusiness",
       "name": "Happy Taxi Service",
-      "image": "https://htcab.in/htcab-haridwar-best-taxi-service-card.jpg", 
+      "image": "https://happy-taxi-full-stack.vercel.app/htcab-haridwar-best-taxi-service-card.jpg", 
       "telephone": "+91-9760764682",
       "address": {
         "@type": "PostalAddress",
@@ -241,7 +241,7 @@ const structuredData = {
         "latitude": "29.9457",
         "longitude": "78.1642"
       },
-      "url": "https://htcab.in",
+      "url": "https://happy-taxi-full-stack.vercel.app",
       "priceRange": "₹₹",
       "openingHoursSpecification": {
         "@type": "OpeningHoursSpecification",
@@ -260,19 +260,19 @@ const structuredData = {
     },
     {
       "@type": "WebSite",
-      "@id": "https://htcab.in/#website",
-      "url": "https://htcab.in",
+      "@id": "https://happy-taxi-full-stack.vercel.app/#website",
+      "url": "https://happy-taxi-full-stack.vercel.app",
       "name": "HTCab Haridwar - Best Taxi Service in Haridwar",
       "description": "Book reliable taxi services in Haridwar. Temple tours, airport transfers, outstation trips with verified drivers.",
       "publisher": {
-        "@id": "https://htcab.in/#localbusiness"
+        "@id": "https://happy-taxi-full-stack.vercel.app/#localbusiness"
       },
       "potentialAction": [
         {
           "@type": "SearchAction",
           "target": {
             "@type": "EntryPoint",
-            "urlTemplate": "https://htcab.in/search?q={search_term_string}"
+            "urlTemplate": "https://happy-taxi-full-stack.vercel.app/search?q={search_term_string}"
           },
           "query-input": "required name=search_term_string"
         }
@@ -281,13 +281,13 @@ const structuredData = {
     },
     {
       "@type": "Organization",
-      "@id": "https://htcab.in/#organization",
+      "@id": "https://happy-taxi-full-stack.vercel.app/#organization",
       "name": "Happy Taxi Service",
       "alternateName": "HTCab Haridwar",
-      "url": "https://htcab.in",
+      "url": "https://happy-taxi-full-stack.vercel.app",
       "logo": {
         "@type": "ImageObject",
-        "url": "https://htcab.in/htcab-haridwar-best-taxi-service-logo.jpg", 
+        "url": "https://happy-taxi-full-stack.vercel.app/htcab-haridwar-best-taxi-service-logo.jpg", 
         "width": 300,
         "height": 300
       },
