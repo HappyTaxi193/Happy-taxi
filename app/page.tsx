@@ -1,8 +1,6 @@
-// page.tsx (for the root route '/')
-"use client" // This directive is necessary for client-side functionality like useState, useEffect, and localStorage
-
-import { useEffect, useState } from "react" // Import useState and useEffect
-import { useRouter } from "next/navigation" // Import useRouter for redirection
+"use client"
+import { useEffect, useState } from "react" 
+import { useRouter } from "next/navigation" 
 import { Navbar } from "@/components/navbar"
 import { HeroSection } from "@/components/hero-section"
 import { FeaturesSection } from "@/components/features-section"
@@ -10,11 +8,10 @@ import { CTASection } from "@/components/cta-section"
 import { Footer } from "@/components/footer"
 
 export default function Home() {
-  const [user, setUser] = useState<any>(null) // State to store user data
+  const [user, setUser] = useState<any>(null) 
   const router = useRouter()
 
   useEffect(() => {
-    // Attempt to load user data from localStorage when the component mounts
     const userData = localStorage.getItem("user")
     if (userData) {
       try {
