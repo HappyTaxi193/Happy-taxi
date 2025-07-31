@@ -12,6 +12,7 @@ export const metadata: Metadata = {
   title: "HTCab Haridwar - Best Taxi Service | Book Cabs Online in Haridwar",
   description: "HTCab Haridwar offers reliable taxi services, cab booking, and tour packages in Haridwar. 24/7 available, verified drivers, affordable rates. Book temple tours, airport transfers & outstation trips.",
   keywords: [
+    "happy taxi haridwar",
     "htcab haridwar",
     "happy taxi service",
     "taxi service haridwar",
@@ -225,7 +226,7 @@ const structuredData = {
       "@type": "LocalBusiness",
       "@id": "https://happy-taxi-full-stack.vercel.app/#localbusiness",
       "name": "Happy Taxi Service",
-      "image": "https://happy-taxi-full-stack.vercel.app/htcab-haridwar-best-taxi-service-logo.jpg", 
+      "image": "https://happy-taxi-full-stack.vercel.app/htcab-haridwar-best-taxi-service-card.jpg", 
       "telephone": "+91-9760764682",
       "address": {
         "@type": "PostalAddress",

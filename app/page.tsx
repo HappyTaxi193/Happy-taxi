@@ -19,11 +19,10 @@ export default function Home() {
         setUser(parsedUser)
       } catch (error) {
         console.error("Error parsing user data from localStorage:", error)
-        // Handle corrupted localStorage data, e.g., clear it
         localStorage.removeItem("user")
       }
     }
-  }, []) // Empty dependency array means this runs once on mount
+  }, []) 
 
   const handleLogout = () => {
     localStorage.removeItem("user") // Clear user data from localStorage
@@ -35,13 +34,12 @@ export default function Home() {
   return (
     <main className="min-h-screen">
       <Navbar
-        user={user} // Pass the user object to Navbar
-        onLogout={handleLogout} // Pass the logout function
-        showGetStarted={!user} // Show "Get Started" only if not logged in
+        user={user} 
+        onLogout={handleLogout} 
+        showGetStarted={!user} 
         links={[
           { href: "/", label: "Home" },
           { href: "/rides", label: "Find Rides" },
-          // The "Dashboard" link logic is handled internally by Navbar based on `user.role`
         ]}
       />
       <HeroSection />

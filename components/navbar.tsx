@@ -71,6 +71,12 @@ export function Navbar({ onLogout, user, showGetStarted }: NavbarProps) {
               >
                 Find Rides
               </Link>
+              <Link
+                href="/how-it-works"
+                className="text-foreground hover:text-primary px-3 py-2 rounded-md text-sm font-medium"
+              >
+                How it works
+              </Link>
               {/* Dashboard Button */}
               <Button
                 variant="ghost"
@@ -144,6 +150,12 @@ export function Navbar({ onLogout, user, showGetStarted }: NavbarProps) {
             >
               Find Rides
             </Link>
+            <Link
+                href="/how-it-works"
+                className="text-foreground hover:text-primary px-3 py-2 rounded-md text-sm font-medium"
+              >
+                How it Works
+              </Link>
             {/* Dashboard Button (styled like a link) for Mobile */}
             <Button
               variant="ghost"

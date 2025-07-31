@@ -17,13 +17,11 @@ export function Footer() {
               Connecting drivers and passengers for safe, reliable, and affordable rides. Your journey is our priority.
             </p>
             <div className="flex space-x-4">
-              <Link href="#" className="text-muted-foreground hover:text-primary">
+              <Link href="https://www.facebook.com/people/Deepak-Joshi/pfbid02u8D63BVc26apTbkdcC7n95wVkNx67FNDdvmra3Ed67utb49d5cfzAWHUbXx5kxs5l/?rdid=XRjjpoqQNQRsVxP9&share_url=https%3A%2F%2Fwww.facebook.com%2Fshare%2F1ELNes8Ydj%2F" className="text-muted-foreground hover:text-primary">
                 <Facebook className="h-5 w-5" />
               </Link>
-              <Link href="#" className="text-muted-foreground hover:text-primary">
-                <Twitter className="h-5 w-5" />
-              </Link>
-              <Link href="#" className="text-muted-foreground hover:text-primary">
+              
+              <Link href="https://www.instagram.com/happytaxiservice1?igsh=MXhxNG1nMXcxZXQ1YQ==" className="text-muted-foreground hover:text-primary">
                 <Instagram className="h-5 w-5" />
               </Link>
             </div>
@@ -36,6 +34,11 @@ export function Footer() {
               <li>
                 <Link href="/" className="text-muted-foreground hover:text-primary">
                   Home
+                </Link>
+              </li>
+              <li>
+                <Link href="/safety" className="text-muted-foreground hover:text-primary">
+                  Safety
                 </Link>
               </li>
               <li>
