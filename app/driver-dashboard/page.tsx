@@ -28,7 +28,7 @@ interface Driver {
   car_make: string
   is_verified: boolean
   total_earnings: number
-  completed_rides: number // Ensure this is part of the driver interface
+  completed_rides: number
 }
 
 interface Ride {
@@ -42,7 +42,7 @@ interface Ride {
   departure_time: string
   status: "active" | "completed" | "cancelled"
   created_at: string
-  is_ride_completed: boolean | null; // Updated to allow null for initial state
+  is_ride_completed: boolean | null;
 }
 
 interface Booking {
@@ -52,9 +52,8 @@ interface Booking {
   seats_booked: number
   status: string
   created_at: string
-  // Changed 'user' to 'users' based on the error message and hint
-  users: { 
-    phone: string 
+  users: {
+    phone: string
   }
   rides?: {
     id: string;
@@ -85,16 +84,11 @@ export default function DriverDashboard() {
     departure_time: "",
   })
   const router = useRouter()
-
-  // New states for Edit Ride functionality
   const [showEditRideDialog, setShowEditRideDialog] = useState(false)
   const [editingRide, setEditingRide] = useState<Ride | null>(null)
   const [editedRideDetails, setEditedRideDetails] = useState({
     price: "",
-    // Removed available_seats from state
   })
-
-  // New states for Booking Summary functionality
   const [showBookingSummaryDialog, setShowBookingSummaryDialog] = useState(false)
   const [selectedRideBookings, setSelectedRideBookings] = useState<Booking[]>([])
 
@@ -131,7 +125,7 @@ export default function DriverDashboard() {
 
       const { data: ridesData, error: ridesError } = await supabase
         .from("rides")
-        .select("*, is_ride_completed") // Select the new column
+        .select("*, is_ride_completed")
         .eq("driver_id", driverData.id)
         .order("created_at", { ascending: false })
 
@@ -141,8 +135,6 @@ export default function DriverDashboard() {
       }
       setRides(ridesData || [])
 
-      // Fetch bookings for earnings calculation and summary
-      // Improved error logging for bookings fetch
       const { data: bookingsData, error: bookingsError } = await supabase
         .from("bookings")
         .select(`
@@ -155,16 +147,13 @@ export default function DriverDashboard() {
             status,
             is_ride_completed
           )
-        `) // Removed the comment from here
+        `)
         .eq("rides.driver_id", driverData.id)
-        .eq("rides.is_ride_completed", true); // Filter by is_ride_completed for earnings
+        .eq("rides.is_ride_completed", true);
 
       if (bookingsError) {
-        console.error("Bookings fetch error detailed:", bookingsError); // Log full error object
-        // You might want to show an alert here as well, or handle specific error codes
-        // alert(`Failed to fetch bookings: ${bookingsError.message || 'Unknown error'}`);
+        console.error("Bookings fetch error detailed:", bookingsError);
       } else {
-        // Calculate total earnings only from rides that are marked as completed
         const earnings = (bookingsData || []).reduce((total, booking) => {
           if (booking.rides && booking.rides.is_ride_completed === true) {
             return total + (booking.seats_booked * booking.rides.price)
@@ -172,16 +161,10 @@ export default function DriverDashboard() {
           return total
         }, 0)
         setTotalEarnings(earnings)
-
-        // Calculate earnings per ride - only for completed rides
         const rideEarningsMap: Record<string, number> = {}
-
-        // Initialize all rides with 0 earnings first
         ;(ridesData || []).forEach(ride => {
           rideEarningsMap[ride.id] = 0
         })
-
-        // Add earnings only for rides where is_ride_completed is true
         ;(bookingsData || []).forEach(booking => {
           const rideId = booking.ride_id
           if (booking.rides && booking.rides.is_ride_completed === true) {
@@ -192,7 +175,6 @@ export default function DriverDashboard() {
       }
     } catch (error) {
       console.error("Error fetching driver data:", error)
-      // Generic error for the entire fetch operation
       alert("Failed to load dashboard data. Please refresh the page.")
     } finally {
       setLoading(false)
@@ -213,7 +195,7 @@ export default function DriverDashboard() {
           total_seats: Number.parseInt(newRide.total_seats),
           available_seats: Number.parseInt(newRide.total_seats),
           departure_time: newRide.departure_time,
-          is_ride_completed: null, // Set to null on creation
+          is_ride_completed: null,
         },
       ])
 
@@ -241,7 +223,6 @@ export default function DriverDashboard() {
     }
 
     try {
-      // 1. Update ride status and is_ride_completed
       const { error: rideUpdateError } = await supabase
         .from("rides")
         .update({ status: "completed", is_ride_completed: true })
@@ -249,7 +230,6 @@ export default function DriverDashboard() {
 
       if (rideUpdateError) throw rideUpdateError
 
-      // 2. Increment completed_rides for the driver
       if (driver) {
         const { data: currentDriverData, error: driverFetchError } = await supabase
           .from("drivers")
@@ -283,15 +263,13 @@ export default function DriverDashboard() {
     }
 
     try {
-      // Cancel the ride and set is_ride_completed to false (incomplete)
       const { error: rideError } = await supabase
         .from("rides")
-        .update({ status: "cancelled", is_ride_completed: false }) // Mark as incomplete
+        .update({ status: "cancelled", is_ride_completed: false })
         .eq("id", rideId)
 
       if (rideError) throw rideError
 
-      // Also cancel all bookings for this ride
       const { error: bookingError } = await supabase
         .from("bookings")
         .update({ status: "cancelled" })
@@ -299,10 +277,8 @@ export default function DriverDashboard() {
 
       if (bookingError) {
         console.error("Error cancelling bookings:", bookingError)
-        // Continue anyway as the ride is already cancelled
       }
 
-      // Refresh data to update earnings and ride status
       fetchDriverData(user.id)
       alert("Ride cancelled successfully! All associated bookings have been cancelled.")
     } catch (error) {
@@ -315,7 +291,6 @@ export default function DriverDashboard() {
     setEditingRide(ride)
     setEditedRideDetails({
       price: ride.price.toString(),
-      // Removed available_seats from state update
     })
     setShowEditRideDialog(true)
   }
@@ -326,9 +301,8 @@ export default function DriverDashboard() {
 
     try {
       const updatedPrice = Number.parseFloat(editedRideDetails.price)
-      // Removed available_seats from update
 
-      if (isNaN(updatedPrice)) { // Only check price validity now
+      if (isNaN(updatedPrice)) {
         alert("Please enter a valid number for price.")
         return
       }
@@ -337,7 +311,6 @@ export default function DriverDashboard() {
         .from("rides")
         .update({
           price: updatedPrice,
-          // Removed available_seats from update object
         })
         .eq("id", editingRide.id)
 
@@ -355,7 +328,6 @@ export default function DriverDashboard() {
 
   const handleShowBookingSummary = async (rideId: string) => {
     try {
-      // Improved error logging for booking summary fetch
       const { data: bookingsSummary, error } = await supabase
         .from("bookings")
         .select(`
@@ -363,13 +335,13 @@ export default function DriverDashboard() {
           seats_booked,
           status,
           users (phone)
-        `) // Removed the comment from here
+        `)
         .eq("ride_id", rideId)
-        .in("status", ["confirmed", "completed"]) // Only show confirmed/completed bookings
+        .in("status", ["confirmed", "completed"])
 
       if (error) {
-        console.error("Booking summary fetch error detailed:", error); // Log full error object
-        throw error; // Re-throw to be caught by the outer catch block
+        console.error("Booking summary fetch error detailed:", error);
+        throw error;
       }
 
       setSelectedRideBookings(bookingsSummary || [])
@@ -386,7 +358,7 @@ export default function DriverDashboard() {
       const { error } = await supabase.from("sos_alerts").insert([
         {
           driver_id: driver?.id,
-          location: "Current Location", // In a real app, this would be a dynamic location
+          location: "Current Location",
           status: "active",
         },
       ])
@@ -403,52 +375,48 @@ export default function DriverDashboard() {
   }
 
   const handleSubmitReview = async () => {
-  if (!selectedCustomer) return
+    if (!selectedCustomer) return
 
-  try {
-    // First check if review already exists
-    const { data: existingReview, error: checkError } = await supabase
-      .from("driver_reviews") // Assuming driver_reviews is the correct table
-      .select("id")
-      .eq("booking_id", selectedCustomer.id)
-      .single()
+    try {
+      const { data: existingReview, error: checkError } = await supabase
+        .from("driver_reviews")
+        .select("id")
+        .eq("booking_id", selectedCustomer.id)
+        .single()
 
-    if (checkError && checkError.code !== 'PGRST116') {
-      // PGRST116 = no rows returned, which is what we want
-      throw checkError
-    }
+      if (checkError && checkError.code !== 'PGRST116') {
+        throw checkError
+      }
 
-    if (existingReview) {
-      alert("You have already reviewed this customer for this booking.")
+      if (existingReview) {
+        alert("You have already reviewed this customer for this booking.")
+        setSelectedCustomer(null)
+        return
+      }
+
+      const { error } = await supabase.from("driver_reviews").insert([
+        {
+          driver_id: driver?.id,
+          customer_id: selectedCustomer.user_id,
+          booking_id: selectedCustomer.id,
+          rating: rating,
+          review: reviewText,
+        },
+      ])
+
+      if (error) throw error
+
       setSelectedCustomer(null)
-      return
+      setReviewText("")
+      setRating(5)
+      alert("Review submitted successfully!")
+
+      fetchDriverData(user.id)
+    } catch (error) {
+      console.error("Error submitting review:", error)
+      alert("Failed to submit review. Please try again.")
     }
-
-    // Insert new review
-    const { error } = await supabase.from("driver_reviews").insert([
-      {
-        driver_id: driver?.id,
-        customer_id: selectedCustomer.user_id,
-        booking_id: selectedCustomer.id,
-        rating: rating,
-        review: reviewText,
-      },
-    ])
-
-    if (error) throw error
-
-    setSelectedCustomer(null)
-    setReviewText("")
-    setRating(5)
-    alert("Review submitted successfully!")
-
-    // Refresh data to update any related stats (like driver ratings in future)
-    fetchDriverData(user.id)
-  } catch (error) {
-    console.error("Error submitting review:", error)
-    alert("Failed to submit review. Please try again.")
   }
-}
 
   const handleLogout = () => {
     localStorage.removeItem("user")
@@ -485,20 +453,20 @@ export default function DriverDashboard() {
       <Navbar />
       <div className="pt-20 pb-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center mb-8">
+          <div className="flex flex-col md:flex-row md:justify-between items-start md:items-center mb-8">
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Driver Dashboard</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Driver Dashboard</h1>
               <div className="text-muted-foreground">
                 Welcome back! Phone: {user.phone}
                 {!driver.is_verified && (
-                  <Badge variant="destructive" className="ml-2">
+                  <Badge variant="destructive" className="ml-2 mt-1 md:mt-0">
                     Pending Verification
                   </Badge>
                 )}
-                {driver.is_verified && <Badge className="ml-2 bg-green-600">Verified</Badge>}
+                {driver.is_verified && <Badge className="ml-2 mt-1 md:mt-0 bg-green-600">Verified</Badge>}
               </div>
             </div>
-            <div className="flex space-x-2">
+            <div className="flex space-x-2 mt-4 md:mt-0">
               <Button
                 variant="destructive"
                 onClick={handleSOS}
@@ -571,7 +539,7 @@ export default function DriverDashboard() {
           </div>
 
           <Tabs defaultValue="rides">
-            <TabsList>
+            <TabsList className="w-full sm:w-auto grid grid-cols-2">
               <TabsTrigger value="rides">My Rides</TabsTrigger>
               <TabsTrigger value="profile">Profile</TabsTrigger>
             </TabsList>
@@ -580,12 +548,12 @@ export default function DriverDashboard() {
               {driver.is_verified && (
                 <Card>
                   <CardHeader>
-                    <div className="flex justify-between items-center">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
                       <div>
                         <CardTitle>Ride Management</CardTitle>
                         <CardDescription>Post new rides and manage existing ones</CardDescription>
                       </div>
-                      <Button onClick={() => setShowAddRide(!showAddRide)}>
+                      <Button onClick={() => setShowAddRide(!showAddRide)} className="mt-4 sm:mt-0">
                         <Plus className="h-4 w-4 mr-2" />
                         Add New Ride
                       </Button>
@@ -684,7 +652,7 @@ export default function DriverDashboard() {
                     <div className="space-y-4">
                       {rides.map((ride) => (
                         <div key={ride.id} className="border rounded-lg p-4">
-                          <div className="flex justify-between items-start mb-3">
+                          <div className="flex flex-col sm:flex-row justify-between items-start mb-3">
                             <div className="flex-1">
                               <div className="flex items-center space-x-2 mb-2">
                                 <MapPin className="h-4 w-4 text-primary" />
@@ -692,18 +660,18 @@ export default function DriverDashboard() {
                                   {ride.from_location} → {ride.to_location}
                                 </span>
                               </div>
-                              <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                              <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 text-sm text-muted-foreground">
                                 <div className="flex items-center space-x-1">
                                   <Calendar className="h-4 w-4" />
                                   <span>{new Date(ride.departure_time).toLocaleString()}</span>
                                 </div>
-                                <div className="flex items-center space-x-1">
+                                <div className="flex items-center space-x-1 mt-2 sm:mt-0">
                                   <Users className="h-4 w-4" />
                                   <span>
                                     {ride.available_seats}/{ride.total_seats} available
                                   </span>
                                 </div>
-                                <div className="flex items-center space-x-1">
+                                <div className="flex items-center space-x-1 mt-2 sm:mt-0">
                                   <IndianRupee className="h-4 w-4" />
                                   <span>{ride.price} per seat</span>
                                 </div>
@@ -717,6 +685,7 @@ export default function DriverDashboard() {
                                     ? "secondary"
                                     : "destructive"
                               }
+                              className="mt-2 sm:mt-0"
                             >
                               {ride.status}
                             </Badge>
@@ -734,7 +703,7 @@ export default function DriverDashboard() {
                                 This ride was cancelled - no earnings from this trip
                               </p>
                             )}
-                            <div className="flex space-x-2 mt-3">
+                            <div className="flex flex-wrap gap-2 mt-3">
                               {ride.status === "active" && (
                                 <>
                                   <Button size="sm" onClick={() => handleCompleteRide(ride.id)}>
@@ -858,7 +827,6 @@ export default function DriverDashboard() {
                 required
               />
             </div>
-            {/* Removed available_seats input field */}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setShowEditRideDialog(false)}>Cancel</Button>
               <Button type="submit">Save changes</Button>
@@ -883,8 +851,7 @@ export default function DriverDashboard() {
                   <div key={booking.id} className="flex justify-between items-center border-b pb-2 last:border-b-0 last:pb-0">
                     <div className="flex items-center gap-2">
                       <Phone className="h-4 w-4 text-primary" />
-                      {/* Fixed: Changed booking.user.phone to booking.users.phone */}
-                      <span className="font-medium">{booking.users.phone}</span> 
+                      <span className="font-medium">{booking.users.phone}</span>
                     </div>
                     <Badge variant="secondary">{booking.seats_booked} Seats</Badge>
                   </div>
