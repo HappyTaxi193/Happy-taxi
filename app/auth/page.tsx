@@ -12,11 +12,11 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Upload, User, Car, AlertCircle, X, Check, Gavel } from "lucide-react" // Added Gavel icon
+import { Upload, User, Car, AlertCircle, X, Check, Gavel } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
-import { authenticateUser, createUser} from "@/lib/auth"
+import { authenticateUser, createUser } from "@/lib/auth"
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true)
@@ -29,6 +29,7 @@ export default function AuthPage() {
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const [driverData, setDriverData] = useState({
+    name: "",
     primaryPhone: "",
     secondaryPhone: "",
     address: "",
@@ -73,14 +74,12 @@ export default function AuthPage() {
       const result = await authenticateUser(phone, password)
 
       if (result.success && result.user) {
-        // Check if the user is banned from the users table
         if (result.user.is_banned) {
           setError("Your account has been banned. You will be redirected.")
-          setTimeout(() => router.push("/banned"), 1500) // Redirect to the banned page
-          return // Stop further processing
+          setTimeout(() => router.push("/banned"), 1500)
+          return
         }
 
-        // NEW: If the user is a driver, check the drivers table for their ban status
         if (result.user.role === "driver") {
           const { data: driverProfile, error: driverError } = await supabase
             .from("drivers")
@@ -142,32 +141,37 @@ export default function AuthPage() {
       return
     }
 
+    // New check for required documents for drivers
+    if (role === "driver" && (!driverData.photograph || !driverData.drivingLicense)) {
+      setError("Please upload both your photograph and driving license.")
+      setLoading(false)
+      return
+    }
+
     try {
       const userPhone = role === "driver" ? driverData.primaryPhone : phone
       const result = await createUser(userPhone, password, role)
 
       if (!result.success) {
-        // Check if the error is about duplicate phone number
         if (result.error && result.error.includes("phone number already exists")) {
           setError("This phone number is already registered. Please use a different number or try logging in.")
-          setLoading(false)
-          return
+        } else {
+          setError(result.error || "Signup failed. Please try again.")
         }
-        throw new Error(result.error)
+        setLoading(false)
+        return
       }
 
-      // Check if the newly created user (or an existing one if phone conflict occurs) is banned
       if (result.user && result.user.is_banned) {
         setError("Your account has been banned. You will be redirected.")
-        setTimeout(() => router.push("/banned"), 1500) // Redirect to the banned page
-        return // Stop further processing
+        setTimeout(() => router.push("/banned"), 1500)
+        return
       }
 
       if (role === "driver" && result.user) {
         setUploadingFiles(true)
-        
+
         try {
-          // Convert files to base64
           let photographBase64 = null
           let drivingLicenseBase64 = null
 
@@ -181,10 +185,10 @@ export default function AuthPage() {
             drivingLicenseBase64 = await fileToBase64(driverData.drivingLicense)
           }
 
-          // Insert driver data with base64 files
           const { error: driverError } = await supabase.from("drivers").insert([
             {
               user_id: result.user.id,
+              name: driverData.name,
               primary_phone: driverData.primaryPhone,
               secondary_phone: driverData.secondaryPhone || null,
               address: driverData.address,
@@ -192,25 +196,32 @@ export default function AuthPage() {
               vehicle_number: driverData.vehicleNumber,
               car_model: driverData.carModel,
               car_make: driverData.carMake,
-              driving_license_url: drivingLicenseBase64, // Store as base64
-              photograph_url: photographBase64, // Store as base64
+              driving_license_url: drivingLicenseBase64,
+              photograph_url: photographBase64,
             },
           ])
 
           if (driverError) {
             console.error('Driver data insertion error:', driverError)
-            throw new Error(`Failed to save driver data: ${driverError.message}`)
+            if (driverError.code === '23505' && driverError.message.includes('aadhaar_number')) {
+              setError("This Aadhaar number is already registered. Please check the number or contact support.")
+            } else {
+              setError("Failed to save driver data. Please try again.")
+            }
+            await supabase.from("users").delete().eq("id", result.user.id)
+            setLoading(false)
+            setUploadingFiles(false)
+            return
           }
 
           setSuccess("Driver registration successful! Please wait for admin approval.")
           setTimeout(() => router.push("/"), 2000)
         } catch (error) {
           console.error('File processing error:', error)
-          // Clean up user if driver data insertion failed
           if (result.user) {
             await supabase.from("users").delete().eq("id", result.user.id)
           }
-          throw error
+          setError("Failed to upload documents. Please try again.")
         }
       } else {
         localStorage.setItem("user", JSON.stringify(result.user))
@@ -219,13 +230,9 @@ export default function AuthPage() {
       }
     } catch (error) {
       console.error("Signup error:", error)
-      
-      // Handle specific error messages
       const errorMessage = error instanceof Error ? error.message : "Signup failed. Please try again."
-      
-      if (errorMessage.includes("phone number already exists") || 
-          errorMessage.includes("already registered") || 
-          errorMessage.includes("duplicate")) {
+
+      if (errorMessage.includes("phone number already exists") || errorMessage.includes("duplicate")) {
         setError("This phone number is already taken. Please use a different number or try logging in.")
       } else if (errorMessage.includes("upload") || errorMessage.includes("storage")) {
         setError("Failed to upload documents. Please try again.")
@@ -374,6 +381,17 @@ export default function AuthPage() {
                       </form>
                     ) : (
                       <form onSubmit={handleSignup} className="space-y-4">
+                        <div>
+                          <Label htmlFor="driverName">Full Name</Label>
+                          <Input
+                            id="driverName"
+                            type="text"
+                            placeholder="Enter your full name"
+                            value={driverData.name}
+                            onChange={(e) => setDriverData({ ...driverData, name: e.target.value })}
+                            required
+                          />
+                        </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <Label htmlFor="primaryPhone">Primary Phone</Label>
@@ -490,10 +508,10 @@ export default function AuthPage() {
                             <div>
                               <Label htmlFor="photograph" className="cursor-pointer">
                                 <div className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
-                                  driverData.photograph 
-                                    ? 'border-green-500 bg-green-50' 
+                                  driverData.photograph
+                                    ? 'border-green-500 bg-green-50'
                                     : 'border-muted-foreground/25 hover:border-primary/50'
-                                }`}>
+                                  }`}>
                                   {driverData.photograph ? (
                                     <div className="space-y-2">
                                       <Check className="h-6 w-6 mx-auto text-green-600" />
@@ -534,10 +552,10 @@ export default function AuthPage() {
                             <div>
                               <Label htmlFor="license" className="cursor-pointer">
                                 <div className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
-                                  driverData.drivingLicense 
-                                    ? 'border-green-500 bg-green-50' 
+                                  driverData.drivingLicense
+                                    ? 'border-green-500 bg-green-50'
                                     : 'border-muted-foreground/25 hover:border-primary/50'
-                                }`}>
+                                  }`}>
                                   {driverData.drivingLicense ? (
                                     <div className="space-y-2">
                                       <Check className="h-6 w-6 mx-auto text-green-600" />

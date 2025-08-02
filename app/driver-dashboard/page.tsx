@@ -64,6 +64,19 @@ interface Booking {
   };
 }
 
+// Helper function to safely get the image URL from a Base64 string
+const getImageUrl = (base64String: string | null): string | undefined => {
+  if (!base64String) {
+    return undefined;
+  }
+  // Check if the string already has a data URL prefix
+  if (base64String.startsWith("data:")) {
+    return base64String;
+  }
+  // Assume it's a base64 string without a prefix and construct a data URL
+  return `data:image/jpeg;base64,${base64String}`;
+};
+
 export default function DriverDashboard() {
   const [user, setUser] = useState<any>(null)
   const [driver, setDriver] = useState<Driver | null>(null)
@@ -91,6 +104,8 @@ export default function DriverDashboard() {
   })
   const [showBookingSummaryDialog, setShowBookingSummaryDialog] = useState(false)
   const [selectedRideBookings, setSelectedRideBookings] = useState<Booking[]>([])
+  const [photoError, setPhotoError] = useState<boolean>(false)
+  const [licenseError, setLicenseError] = useState<boolean>(false)
 
   useEffect(() => {
     const userData = localStorage.getItem("user")
@@ -428,6 +443,10 @@ export default function DriverDashboard() {
     router.push("/")
   }
 
+  const handleEditProfile = () => {
+    router.push("/edit_profile")
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -452,6 +471,9 @@ export default function DriverDashboard() {
       </div>
     )
   }
+
+  const driverPhotoUrl = getImageUrl(driver.photograph_url);
+  const licensePhotoUrl = getImageUrl(driver.driving_license_url);
 
   return (
     <div className="min-h-screen bg-background">
@@ -740,11 +762,52 @@ export default function DriverDashboard() {
 
             <TabsContent value="profile">
               <Card>
-                <CardHeader>
-                  <CardTitle>Driver Profile</CardTitle>
-                  <CardDescription>Your driver information and vehicle details</CardDescription>
+                <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+                  <div>
+                    <CardTitle>Driver Profile</CardTitle>
+                    <CardDescription>Your driver information and vehicle details</CardDescription>
+                  </div>
+                  <Button onClick={handleEditProfile} size="sm" className="mt-4 sm:mt-0">
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit Profile
+                  </Button>
                 </CardHeader>
                 <CardContent className="space-y-6">
+                  {/* Image Section */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <h3 className="font-semibold">Driver Image</h3>
+                      {driverPhotoUrl && !photoError ? (
+                        <img
+                          src={driverPhotoUrl}
+                          alt="Driver's Photograph"
+                          className="w-full max-w-sm rounded-md shadow-md"
+                          onError={() => setPhotoError(true)}
+                        />
+                      ) : (
+                        <div className="flex h-48 w-full max-w-sm items-center justify-center rounded-md bg-gray-200 text-gray-500">
+                          {photoError ? "Error loading image" : "No image available"}
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="font-semibold">Driving License</h3>
+                      {licensePhotoUrl && !licenseError ? (
+                        <img
+                          src={licensePhotoUrl}
+                          alt="Driving License"
+                          className="w-full max-w-sm rounded-md shadow-md"
+                          onError={() => setLicenseError(true)}
+                        />
+                      ) : (
+                        <div className="flex h-48 w-full max-w-sm items-center justify-center rounded-md bg-gray-200 text-gray-500">
+                          {licenseError ? "Error loading image" : "No image available"}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Other Profile Information */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-4">
                       <h3 className="font-semibold">Personal Information</h3>
