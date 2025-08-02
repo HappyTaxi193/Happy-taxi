@@ -1,18 +1,46 @@
 "use client"
 
 import type React from "react"
-
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
-import { Search, MapPin, Calendar, Users } from "lucide-react"
+import { Search, Calendar, Users } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { supabase } from "@/lib/supabase"
+import { LocationSearchInput } from "@/components/LocationSearchInput"
 
 export function HeroSection() {
   const [fromLocation, setFromLocation] = useState("")
   const [toLocation, setToLocation] = useState("")
+  const [allLocations, setAllLocations] = useState<string[]>([])
   const router = useRouter()
+
+  useEffect(() => {
+    fetchLocations()
+  }, [])
+
+  const fetchLocations = async () => {
+    try {
+      const { data: rides, error } = await supabase
+        .from("rides")
+        .select("from_location, to_location")
+        .eq("status", "active")
+        .gte("departure_time", new Date().toISOString())
+
+      if (error) throw error
+
+      const uniqueLocations = new Set<string>()
+      rides?.forEach(ride => {
+        uniqueLocations.add(ride.from_location)
+        uniqueLocations.add(ride.to_location)
+      })
+
+      setAllLocations(Array.from(uniqueLocations))
+    } catch (error) {
+      console.error("Error fetching locations:", error)
+    }
+  }
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -47,26 +75,20 @@ export function HeroSection() {
             <CardContent className="p-6">
               <form onSubmit={handleSearch} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
-                    <Input
-                      placeholder="From location"
-                      value={fromLocation}
-                      onChange={(e) => setFromLocation(e.target.value)}
-                      className="pl-10"
-                      required
-                    />
-                  </div>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
-                    <Input
-                      placeholder="To location"
-                      value={toLocation}
-                      onChange={(e) => setToLocation(e.target.value)}
-                      className="pl-10"
-                      required
-                    />
-                  </div>
+                  <LocationSearchInput
+                    placeholder="From location"
+                    value={fromLocation}
+                    onChange={setFromLocation}
+                    onSelect={setFromLocation}
+                    suggestions={allLocations}
+                  />
+                  <LocationSearchInput
+                    placeholder="To location"
+                    value={toLocation}
+                    onChange={setToLocation}
+                    onSelect={setToLocation}
+                    suggestions={allLocations}
+                  />
                 </div>
                 <Button type="submit" className="w-full" size="lg">
                   <Search className="mr-2 h-5 w-5" />
@@ -87,7 +109,7 @@ export function HeroSection() {
             </div>
             <div className="text-center">
               <div className="bg-white/20 dark:bg-gray-800/20 backdrop-blur-sm rounded-lg p-6">
-                <MapPin className="h-8 w-8 text-yellow-300 mx-auto mb-2" />
+                <Calendar className="h-8 w-8 text-yellow-300 mx-auto mb-2" />
                 <div className="text-2xl font-bold text-white">50+</div>
                 <div className="text-white/80">Cities Covered</div>
               </div>

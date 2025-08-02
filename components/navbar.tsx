@@ -152,7 +152,7 @@ export function Navbar({ onLogout, user, showGetStarted }: NavbarProps) {
             </Link>
             <Link
                 href="/how-it-works"
-                className="text-foreground hover:text-primary px-3 py-2 rounded-md text-sm font-medium"
+                className="text-foreground hover:text-primary block px-3 py-2 rounded-md text-base font-medium"
               >
                 How it Works
               </Link>
