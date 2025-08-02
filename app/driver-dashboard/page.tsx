@@ -186,6 +186,11 @@ export default function DriverDashboard() {
     if (!driver) return
 
     try {
+      // Create a Date object from the datetime-local input value
+      const departureDate = new Date(newRide.departure_time);
+      // Convert to an ISO string for consistent storage (e.g., UTC)
+      const departureIso = departureDate.toISOString();
+
       const { error } = await supabase.from("rides").insert([
         {
           driver_id: driver.id,
@@ -194,7 +199,7 @@ export default function DriverDashboard() {
           price: Number.parseFloat(newRide.price),
           total_seats: Number.parseInt(newRide.total_seats),
           available_seats: Number.parseInt(newRide.total_seats),
-          departure_time: newRide.departure_time,
+          departure_time: departureIso, // Store as ISO string
           is_ride_completed: null,
         },
       ])
