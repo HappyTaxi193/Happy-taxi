@@ -1,6 +1,4 @@
-// page.tsx (Customer Dashboard)
 "use client"
-
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Navbar } from "@/components/navbar"
@@ -9,8 +7,28 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { MapPin, Calendar, Users, IndianRupee, Clock, AlertTriangle, Star, X, Edit, Trash2 } from "lucide-react"
+import { MapPin, Calendar, Users, IndianRupee, Clock, AlertTriangle, Star, X, Edit, Trash2, User, Car, Phone } from "lucide-react"
 import { supabase } from "@/lib/supabase"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+
+interface Driver {
+  name: string
+  photograph_url: string
+  primary_phone: string
+  car_model: string
+  car_make: string
+  vehicle_number: string
+}
+
+interface Ride {
+  id: string
+  from_location: string
+  to_location: string
+  departure_time: string
+  price: number
+  available_seats: number
+  driver: Driver
+}
 
 interface Booking {
   id: string
@@ -18,26 +36,24 @@ interface Booking {
   total_price: number
   status: "confirmed" | "cancelled"
   created_at: string
-  ride: {
-    id: string
-    from_location: string
-    to_location: string
-    departure_time: string
-    price: number
-    available_seats: number
-    driver: {
-      primary_phone: string
-      car_model: string
-      car_make: string
-      vehicle_number: string
-    }
-  }
+  ride: Ride
   reviews?: Array<{
     id: string
     rating: number
     review_text: string
   }>
 }
+
+// Helper function to safely get the image URL from a Base64 string
+const getImageUrl = (base64String: string | null): string | undefined => {
+  if (!base64String) {
+    return undefined;
+  }
+  if (base64String.startsWith("data:")) {
+    return base64String;
+  }
+  return `data:image/jpeg;base64,${base64String}`;
+};
 
 export default function UserDashboard() {
   const [user, setUser] = useState<any>(null)
@@ -46,11 +62,14 @@ export default function UserDashboard() {
   const [showReviewModal, setShowReviewModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showCancelModal, setShowCancelModal] = useState(false)
+  const [showDriverProfileModal, setShowDriverProfileModal] = useState(false)
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
+  const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
   const [rating, setRating] = useState(0)
   const [reviewText, setReviewText] = useState("")
   const [editSeats, setEditSeats] = useState(1)
   const [processingAction, setProcessingAction] = useState(false)
+  const [photoError, setPhotoError] = useState<Record<string, boolean>>({});
   const router = useRouter()
 
   useEffect(() => {
@@ -61,8 +80,6 @@ export default function UserDashboard() {
     }
 
     const parsedUser = JSON.parse(userData)
-    // This check ensures only 'user' role can access this specific dashboard.
-    // If you're logged in as admin/driver, you'll be redirected here.
     if (parsedUser.role !== "user") {
       router.push("/auth")
       return
@@ -86,6 +103,8 @@ export default function UserDashboard() {
             price,
             available_seats,
             driver:drivers (
+              name,
+              photograph_url,
               primary_phone,
               car_model,
               car_make,
@@ -112,7 +131,7 @@ export default function UserDashboard() {
 
   const handleLogout = () => {
     localStorage.removeItem("user")
-    router.push("/") // Redirect to home after logout
+    router.push("/")
   }
 
   const handleSOS = (bookingId: string) => {
@@ -135,9 +154,14 @@ export default function UserDashboard() {
     setShowCancelModal(true)
   }
 
+  const handleDriverProfile = (driver: Driver) => {
+    setSelectedDriver(driver);
+    setShowDriverProfileModal(true);
+  }
+
   const submitReview = async () => {
     if (!selectedBooking || rating === 0) return
-    
+
     setProcessingAction(true)
     try {
       const { error } = await supabase
@@ -156,10 +180,10 @@ export default function UserDashboard() {
         console.error("Supabase error:", error)
         throw error
       }
-      
+
       alert("Review submitted successfully!")
       closeReviewModal()
-      fetchBookings(user.id) // Refresh bookings to show review status
+      fetchBookings(user.id)
     } catch (error) {
       console.error("Error submitting review:", error)
       alert("Failed to submit review. Please try again.")
@@ -170,20 +194,18 @@ export default function UserDashboard() {
 
   const submitEditBooking = async () => {
     if (!selectedBooking || editSeats < 1) return
-    
+
     setProcessingAction(true)
     try {
-      // Check if enough seats are available
       const seatDifference = editSeats - selectedBooking.seats_booked
       if (seatDifference > 0 && seatDifference > selectedBooking.ride.available_seats) {
         alert("Not enough seats available for this booking.")
-        setProcessingAction(false) // Reset processing action
+        setProcessingAction(false)
         return
       }
 
       const newTotalPrice = editSeats * selectedBooking.ride.price
 
-      // Update booking
       const { error: bookingError } = await supabase
         .from("bookings")
         .update({
@@ -194,7 +216,6 @@ export default function UserDashboard() {
 
       if (bookingError) throw bookingError
 
-      // Update ride available seats
       const newAvailableSeats = selectedBooking.ride.available_seats - seatDifference
       const { error: rideError } = await supabase
         .from("rides")
@@ -205,7 +226,7 @@ export default function UserDashboard() {
 
       alert("Booking updated successfully!")
       closeEditModal()
-      fetchBookings(user.id) // Refresh bookings
+      fetchBookings(user.id)
     } catch (error) {
       console.error("Error updating booking:", error)
       alert("Failed to update booking. Please try again.")
@@ -216,10 +237,9 @@ export default function UserDashboard() {
 
   const confirmCancelBooking = async () => {
     if (!selectedBooking) return
-    
+
     setProcessingAction(true)
     try {
-      // Update booking status to cancelled
       const { error: bookingError } = await supabase
         .from("bookings")
         .update({ status: "cancelled" })
@@ -227,7 +247,6 @@ export default function UserDashboard() {
 
       if (bookingError) throw bookingError
 
-      // Return seats to ride
       const newAvailableSeats = selectedBooking.ride.available_seats + selectedBooking.seats_booked
       const { error: rideError } = await supabase
         .from("rides")
@@ -238,7 +257,7 @@ export default function UserDashboard() {
 
       alert("Booking cancelled successfully!")
       closeCancelModal()
-      fetchBookings(user.id) // Refresh bookings
+      fetchBookings(user.id)
     } catch (error) {
       console.error("Error cancelling booking:", error)
       alert("Failed to cancel booking. Please try again.")
@@ -264,41 +283,38 @@ export default function UserDashboard() {
     setShowCancelModal(false)
     setSelectedBooking(null)
   }
+  
+  const closeDriverProfileModal = () => {
+    setShowDriverProfileModal(false);
+    setSelectedDriver(null);
+  }
 
-  // Check if booking can be edited/cancelled (e.g., not too close to departure time)
   const canModifyBooking = (booking: Booking) => {
     const departureTime = new Date(booking.ride.departure_time)
     const now = new Date()
     const hoursUntilDeparture = (departureTime.getTime() - now.getTime()) / (1000 * 60 * 60)
-    
-    return booking.status === "confirmed" && hoursUntilDeparture > 2 // Allow modification if more than 2 hours before departure
+    return booking.status === "confirmed" && hoursUntilDeparture > 2
   }
 
-  // Check if user has already reviewed this booking
   const hasReviewed = (booking: Booking) => {
     return booking.reviews && booking.reviews.length > 0
   }
 
-  // Calculate total spent (only confirmed bookings)
   const totalSpent = bookings
     .filter(booking => booking.status === "confirmed")
     .reduce((sum, booking) => sum + booking.total_price, 0)
 
-  // If user is null, meaning not logged in or role is not "user", return null
-  // This ensures the dashboard content doesn't render until user data is loaded correctly
   if (!user) return null
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar
-        user={user} // Pass the user object to Navbar
-        onLogout={handleLogout} // Pass the logout function
-        showGetStarted={false} // Adjust as needed, typically false for logged-in users
+        user={user}
+        onLogout={handleLogout}
+        showGetStarted={false}
         links={[
-          // You can define specific links for the user dashboard navbar here
           { href: "/", label: "Home" },
           { href: "/rides", label: "Find Rides" },
-          // The "Dashboard" link logic is handled internally by Navbar based on `user.role`
         ]}
       />
       <div className="pt-20 pb-12">
@@ -399,9 +415,28 @@ export default function UserDashboard() {
 
                       {booking.ride.driver && (
                         <div className="bg-muted/50 rounded p-3 text-sm mb-3">
-                          <p>
-                            <strong>Driver:</strong> {booking.ride.driver.primary_phone}
-                          </p>
+                          <div className="flex items-center space-x-4 mb-2">
+                            <div className="h-10 w-10 overflow-hidden rounded-full border">
+                              {booking.ride.driver.photograph_url && !photoError[booking.ride.id] ? (
+                                <img
+                                  src={getImageUrl(booking.ride.driver.photograph_url)}
+                                  alt="Driver's Photograph"
+                                  className="h-full w-full object-cover"
+                                  onError={() => setPhotoError(prev => ({...prev, [booking.ride.id]: true}))}
+                                />
+                              ) : (
+                                <div className="flex items-center justify-center h-full w-full bg-gray-200 text-xs text-gray-500">
+                                  No Photo
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-semibold">{booking.ride.driver.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {booking.ride.driver.primary_phone}
+                              </p>
+                            </div>
+                          </div>
                           <p>
                             <strong>Vehicle:</strong> {booking.ride.driver.car_make} {booking.ride.driver.car_model} (
                             {booking.ride.driver.vehicle_number})
@@ -419,7 +454,17 @@ export default function UserDashboard() {
                           <AlertTriangle className="h-4 w-4" />
                           <span>SOS</span>
                         </Button>
-                        
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDriverProfile(booking.ride.driver)}
+                          className="flex items-center space-x-1"
+                        >
+                          <User className="h-4 w-4" />
+                          <span>Driver Profile</span>
+                        </Button>
+
                         {!hasReviewed(booking) && booking.status === "confirmed" && (
                           <Button
                             variant="outline"
@@ -438,7 +483,7 @@ export default function UserDashboard() {
                             <span>Reviewed ({booking.reviews?.[0]?.rating}/5)</span>
                           </div>
                         )}
-                        
+
                         {canModifyBooking(booking) && (
                           <>
                             <Button
@@ -481,14 +526,14 @@ export default function UserDashboard() {
                 <X className="h-4 w-4" />
               </Button>
             </div>
-            
+
             <div className="mb-4">
               <p className="text-sm text-muted-foreground mb-2">
                 {selectedBooking.ride.from_location} → {selectedBooking.ride.to_location}
               </p>
               {selectedBooking.ride.driver && (
                 <p className="text-sm text-muted-foreground">
-                  Driver: {selectedBooking.ride.driver.primary_phone}
+                  Driver: {selectedBooking.ride.driver.name}
                 </p>
               )}
             </div>
@@ -547,7 +592,7 @@ export default function UserDashboard() {
                 <X className="h-4 w-4" />
               </Button>
             </div>
-            
+
             <div className="mb-4">
               <p className="text-sm text-muted-foreground mb-2">
                 {selectedBooking.ride.from_location} → {selectedBooking.ride.to_location}
@@ -610,7 +655,7 @@ export default function UserDashboard() {
                 <X className="h-4 w-4" />
               </Button>
             </div>
-            
+
             <div className="mb-4">
               <p className="text-sm text-muted-foreground mb-2">
                 Are you sure you want to cancel this booking?
@@ -639,6 +684,57 @@ export default function UserDashboard() {
           </div>
         </div>
       )}
+      
+      {/* Driver Profile Modal */}
+      <Dialog open={showDriverProfileModal} onOpenChange={setShowDriverProfileModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Driver Profile</DialogTitle>
+            <DialogDescription>
+              Information about the driver for your booked ride.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedDriver && (
+            <div className="p-4 space-y-4">
+              <div className="flex items-center space-x-4">
+                <div className="h-24 w-24 overflow-hidden rounded-full border">
+                  {selectedDriver.photograph_url && !photoError['driver-profile'] ? (
+                    <img
+                      src={getImageUrl(selectedDriver.photograph_url)}
+                      alt="Driver's Photograph"
+                      className="h-full w-full object-cover"
+                      onError={() => setPhotoError(prev => ({...prev, 'driver-profile': true}))}
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full w-full bg-gray-200 text-sm text-gray-500 text-center p-2">
+                      No Photo
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <p className="text-xl font-bold">{selectedDriver.name}</p>
+                  <p className="text-sm text-muted-foreground">{selectedDriver.car_make} {selectedDriver.car_model}</p>
+                  <Badge className="mt-1">Verified</Badge>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <Phone className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">{selectedDriver.primary_phone}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Car className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">{selectedDriver.vehicle_number}</span>
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="flex justify-end">
+            <Button onClick={closeDriverProfileModal}>Close</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
