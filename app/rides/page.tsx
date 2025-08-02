@@ -10,9 +10,22 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,} from "@/components/ui/dialog"
-import { MapPin, Calendar, Users, IndianRupee, Phone, Car, Search, X, Star, Clock, SlidersHorizontal } from "lucide-react"
+import { MapPin, Calendar, Users, IndianRupee, Phone, Car, Search, X, Star, Clock, SlidersHorizontal, User } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import type React from "react"
+
+interface Driver {
+  id: string;
+  name: string;
+  photograph_url: string;
+  primary_phone: string;
+  secondary_phone: string | null;
+  car_make: string;
+  car_model: string;
+  vehicle_number: string;
+  rating: number;
+  total_reviews: number;
+}
 
 interface Ride {
   id: string
@@ -24,16 +37,7 @@ interface Ride {
   departure_time: string
   status: "active" | "completed" | "cancelled"
   driver_id: string
-  drivers: {
-    id: string
-    primary_phone: string
-    secondary_phone: string | null
-    car_make: string
-    car_model: string
-    vehicle_number: string
-    rating: number
-    total_reviews: number
-  }
+  drivers: Driver;
 }
 
 interface Booking {
@@ -104,6 +108,17 @@ const LocationSearchInput: React.FC<LocationSearchInputProps> = ({
   )
 }
 
+// Helper function to safely get the image URL from a Base64 string
+const getImageUrl = (base64String: string | null): string | undefined => {
+  if (!base64String) {
+    return undefined;
+  }
+  if (base64String.startsWith("data:")) {
+    return base64String;
+  }
+  return `data:image/jpeg;base64,${base64String}`;
+};
+
 export default function RidesPage() {
   const [rides, setRides] = useState<Ride[]>([])
   const [filteredRides, setFilteredRides] = useState<Ride[]>([])
@@ -120,6 +135,9 @@ export default function RidesPage() {
   const [user, setUser] = useState<any>(null)
   const [showFilters, setShowFilters] = useState(false)
   const [allLocations, setAllLocations] = useState<string[]>([])
+  const [showDriverProfileModal, setShowDriverProfileModal] = useState(false);
+  const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
+  const [photoError, setPhotoError] = useState<Record<string, boolean>>({});
 
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -195,6 +213,8 @@ export default function RidesPage() {
           *,
           drivers (
             id,
+            name,
+            photograph_url,
             primary_phone,
             secondary_phone,
             car_make,
@@ -326,6 +346,11 @@ export default function RidesPage() {
 
   const isRideBooked = (rideId: string) => {
     return userBookings.some(booking => booking.ride_id === rideId)
+  }
+  
+  const handleDriverProfile = (driver: Driver) => {
+    setSelectedDriver(driver);
+    setShowDriverProfileModal(true);
   }
 
   const handleBookRide = async () => {
@@ -588,6 +613,30 @@ export default function RidesPage() {
                         </div>
                       </div>
 
+                      {/* Driver Info Section */}
+                      <div className="flex items-center space-x-4 mb-3">
+                        <div className="h-10 w-10 overflow-hidden rounded-full border">
+                          {ride.drivers.photograph_url && !photoError[ride.id] ? (
+                            <img
+                              src={getImageUrl(ride.drivers.photograph_url)}
+                              alt="Driver's Photograph"
+                              className="h-full w-full object-cover"
+                              onError={() => setPhotoError(prev => ({...prev, [ride.id]: true}))}
+                            />
+                          ) : (
+                            <div className="flex items-center justify-center h-full w-full bg-gray-200 text-xs text-gray-500">
+                              No Photo
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-sm sm:text-base">{ride.drivers.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {ride.drivers.car_make} {ride.drivers.car_model} ({ride.drivers.vehicle_number})
+                          </p>
+                        </div>
+                      </div>
+
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
                         <div className="flex items-start space-x-2">
                           <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mt-0.5 flex-shrink-0" />
@@ -657,7 +706,7 @@ export default function RidesPage() {
                         </div>
                       </div>
 
-                      <div className="pt-2">
+                      <div className="pt-2 flex flex-wrap gap-2">
                         {user && isRideBooked(ride.id) ? (
                           <Badge variant="secondary" className="w-full justify-center py-2 sm:w-auto">
                             Booked
@@ -777,6 +826,15 @@ export default function RidesPage() {
                             </DialogContent>
                           </Dialog>
                         )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDriverProfile(ride.drivers)}
+                          className="w-full sm:w-auto"
+                        >
+                          <User className="h-4 w-4 mr-2" />
+                          Driver Profile
+                        </Button>
                       </div>
                     </div>
                   </CardContent>
@@ -787,6 +845,67 @@ export default function RidesPage() {
         </div>
       </div>
       <Footer />
+
+      <Dialog open={showDriverProfileModal} onOpenChange={setShowDriverProfileModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Driver Profile</DialogTitle>
+            <DialogDescription>
+              Information about the driver for this ride.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedDriver && (
+            <div className="p-4 space-y-4">
+              <div className="flex items-center space-x-4">
+                <div className="h-24 w-24 overflow-hidden rounded-full border">
+                  {selectedDriver.photograph_url && !photoError['driver-profile-modal'] ? (
+                    <img
+                      src={getImageUrl(selectedDriver.photograph_url)}
+                      alt="Driver's Photograph"
+                      className="h-full w-full object-cover"
+                      onError={() => setPhotoError(prev => ({...prev, 'driver-profile-modal': true}))}
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full w-full bg-gray-200 text-sm text-gray-500 text-center p-2">
+                      No Photo
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <p className="text-xl font-bold">{selectedDriver.name}</p>
+                  <p className="text-sm text-muted-foreground">{selectedDriver.car_make} {selectedDriver.car_model}</p>
+                  <div className="flex items-center space-x-1 mt-1">
+                    {selectedDriver.total_reviews > 0 ? (
+                      <>
+                        <div className="flex items-center space-x-1">
+                          {renderStars(selectedDriver.rating)}
+                        </div>
+                        <span className="text-sm font-medium">
+                          {selectedDriver.rating.toFixed(1)}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">
+                        No reviews yet
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <Car className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">{selectedDriver.vehicle_number}</span>
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="flex justify-end">
+            <Button onClick={() => setShowDriverProfileModal(false)}>Close</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
