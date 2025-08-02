@@ -17,6 +17,7 @@ import { supabase } from "@/lib/supabase"
 interface Driver {
   id: string
   user_id: string
+  name: string
   photograph_url: string
   primary_phone: string
   secondary_phone: string | null
@@ -811,6 +812,10 @@ export default function DriverDashboard() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-4">
                       <h3 className="font-semibold">Personal Information</h3>
+                      <div>
+                        <Label>Full Name</Label>
+                        <p className="text-sm text-muted-foreground">{driver.name}</p>
+                      </div>
                       <div>
                         <Label>Primary Phone</Label>
                         <p className="text-sm text-muted-foreground">{driver.primary_phone}</p>
