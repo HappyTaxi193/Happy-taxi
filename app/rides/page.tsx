@@ -1,8 +1,6 @@
-// page.tsx (for the /rides route)
 "use client"
-
 import { useEffect, useState, useCallback } from "react"
-import { useSearchParams, useRouter } from "next/navigation" // Import useRouter
+import { useSearchParams, useRouter } from "next/navigation"
 import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,16 +9,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,} from "@/components/ui/dialog"
 import { MapPin, Calendar, Users, IndianRupee, Phone, Car, Search, X, Star, Clock, SlidersHorizontal } from "lucide-react"
 import { supabase } from "@/lib/supabase"
+import type React from "react"
 
 interface Ride {
   id: string
@@ -53,6 +45,65 @@ interface Booking {
   status: string
 }
 
+// New component for the search input with dropdown suggestions
+interface LocationSearchInputProps {
+  label: string
+  placeholder: string
+  value: string
+  onChange: (value: string) => void
+  onSelect: (value: string) => void
+  suggestions: string[]
+}
+
+const LocationSearchInput: React.FC<LocationSearchInputProps> = ({
+  label,
+  placeholder,
+  value,
+  onChange,
+  onSelect,
+  suggestions,
+}) => {
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const filteredSuggestions = suggestions.filter((s) =>
+    s.toLowerCase().includes(value.toLowerCase())
+  )
+
+  const handleSelect = (suggestion: string) => {
+    onSelect(suggestion)
+    setShowSuggestions(false)
+  }
+
+  return (
+    <div className="relative space-y-2">
+      <Label className="text-sm font-medium">{label}</Label>
+      <Input
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value)
+          setShowSuggestions(true)
+        }}
+        onFocus={() => setShowSuggestions(true)}
+        onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+        className="h-10 sm:h-11"
+      />
+      {showSuggestions && value && filteredSuggestions.length > 0 && (
+        <div className="absolute z-10 w-full mt-1 border border-gray-200 bg-white dark:bg-gray-800 rounded-md shadow-lg max-h-60 overflow-y-auto">
+          {filteredSuggestions.map((suggestion, index) => (
+            <div
+              key={index}
+              onMouseDown={() => handleSelect(suggestion)}
+              className="p-3 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-sm"
+            >
+              {suggestion}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function RidesPage() {
   const [rides, setRides] = useState<Ride[]>([])
   const [filteredRides, setFilteredRides] = useState<Ride[]>([])
@@ -68,12 +119,12 @@ export default function RidesPage() {
   const [bookingLoading, setBookingLoading] = useState(false)
   const [user, setUser] = useState<any>(null)
   const [showFilters, setShowFilters] = useState(false)
+  const [allLocations, setAllLocations] = useState<string[]>([])
 
   const searchParams = useSearchParams()
-  const router = useRouter() // Initialize useRouter
+  const router = useRouter()
 
   useEffect(() => {
-    // Get user from localStorage
     const userData = localStorage.getItem("user")
     if (userData) {
       try {
@@ -81,12 +132,10 @@ export default function RidesPage() {
         setUser(parsedUser)
       } catch (error) {
         console.error("Error parsing user data from localStorage:", error)
-        // Handle corrupted localStorage data, e.g., clear it
         localStorage.removeItem("user")
       }
     }
 
-    // Get search parameters from URL
     const from = searchParams.get("from")
     const to = searchParams.get("to")
     if (from) setFromLocation(from)
@@ -102,7 +151,6 @@ export default function RidesPage() {
     filterRides()
   }, [fromLocation, toLocation, priceFilter, ratingFilter, timeFilter, rides])
 
-  // Function to calculate driver rating from reviews
   const calculateDriverRating = async (driverId: string) => {
     try {
       const { data: reviews, error } = await supabase
@@ -176,6 +224,14 @@ export default function RidesPage() {
       )
 
       setRides(ridesWithRatings)
+      
+      // Extract all unique locations for suggestions
+      const uniqueLocations = new Set<string>();
+      ridesWithRatings.forEach(ride => {
+        uniqueLocations.add(ride.from_location);
+        uniqueLocations.add(ride.to_location);
+      });
+      setAllLocations(Array.from(uniqueLocations));
     } catch (error) {
       console.error("Error fetching rides:", error)
     } finally {
@@ -202,13 +258,13 @@ export default function RidesPage() {
     let filtered = rides
 
     if (fromLocation) {
-      filtered = filtered.filter((ride) => 
+      filtered = filtered.filter((ride) =>
         ride.from_location.toLowerCase().includes(fromLocation.toLowerCase())
       )
     }
 
     if (toLocation) {
-      filtered = filtered.filter((ride) => 
+      filtered = filtered.filter((ride) =>
         ride.to_location.toLowerCase().includes(toLocation.toLowerCase())
       )
     }
@@ -359,32 +415,27 @@ export default function RidesPage() {
     ))
   }
 
-  // --- Start of added/modified Navbar related functions ---
   const handleLogout = () => {
-    localStorage.removeItem("user") // Clear user data from localStorage
-    setUser(null) // Clear user state
-    alert("Logged out successfully!") // Provide feedback to the user
-    router.push("/") // Redirect to home or login page after logout
+    localStorage.removeItem("user")
+    setUser(null)
+    alert("Logged out successfully!")
+    router.push("/")
   }
-  // --- End of added/modified Navbar related functions ---
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Updated Navbar call */}
       <Navbar
-        user={user} // Pass the user object to Navbar
-        onLogout={handleLogout} // Pass the logout function
-        showGetStarted={!user} // Show "Get Started" only if not logged in
+        user={user}
+        onLogout={handleLogout}
+        showGetStarted={!user}
         links={[
           { href: "/", label: "Home" },
           { href: "/rides", label: "Find Rides" },
-          // The "Dashboard" link logic is handled internally by Navbar based on `user.role`
         ]}
       />
       <br /><br />
       <div className="pt-16 sm:pt-20 pb-8 sm:pb-12">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8">
-          {/* Header */}
           <div className="text-center mb-6 sm:mb-8">
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground mb-2 sm:mb-4">
               Find Your Perfect Ride
@@ -394,7 +445,6 @@ export default function RidesPage() {
             </p>
           </div>
 
-          {/* Search Filters */}
           <Card className="mb-6 sm:mb-8">
             <CardHeader className="pb-3 sm:pb-6">
               <div className="flex items-center justify-between">
@@ -414,31 +464,25 @@ export default function RidesPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Main Search - Always Visible */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="from" className="text-sm font-medium">From Location</Label>
-                  <Input
-                    id="from"
-                    placeholder="Enter pickup location"
-                    value={fromLocation}
-                    onChange={(e) => setFromLocation(e.target.value)}
-                    className="h-10 sm:h-11"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="to" className="text-sm font-medium">To Location</Label>
-                  <Input
-                    id="to"
-                    placeholder="Enter destination"
-                    value={toLocation}
-                    onChange={(e) => setToLocation(e.target.value)}
-                    className="h-10 sm:h-11"
-                  />
-                </div>
+                <LocationSearchInput
+                  label="From Location"
+                  placeholder="Enter pickup location"
+                  value={fromLocation}
+                  onChange={setFromLocation}
+                  onSelect={setFromLocation}
+                  suggestions={allLocations}
+                />
+                <LocationSearchInput
+                  label="To Location"
+                  placeholder="Enter destination"
+                  value={toLocation}
+                  onChange={setToLocation}
+                  onSelect={setToLocation}
+                  suggestions={allLocations}
+                />
               </div>
 
-              {/* Additional Filters - Toggle on Mobile */}
               <div className={`${showFilters ? 'block' : 'hidden sm:block'} space-y-4`}>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                   <div className="space-y-2">
@@ -498,14 +542,12 @@ export default function RidesPage() {
             </CardContent>
           </Card>
 
-          {/* Results */}
           <div className="mb-4 px-1">
             <p className="text-sm sm:text-base text-muted-foreground">
               {loading ? "Loading rides..." : `Found ${filteredRides.length} available rides`}
             </p>
           </div>
 
-          {/* Rides List */}
           {loading ? (
             <div className="text-center py-8 sm:py-12">
               <div className="text-base sm:text-lg">Loading available rides...</div>
@@ -531,7 +573,6 @@ export default function RidesPage() {
                 <Card key={ride.id} className="hover:shadow-lg transition-shadow">
                   <CardContent className="p-4 sm:p-6">
                     <div className="space-y-4">
-                      {/* Route and Price Header */}
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between space-y-3 sm:space-y-0">
                         <div className="flex-1">
                           <div className="flex items-center space-x-2 mb-3">
@@ -547,19 +588,18 @@ export default function RidesPage() {
                         </div>
                       </div>
 
-                      {/* Ride Details Grid */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
                         <div className="flex items-start space-x-2">
                           <Calendar className="h-3 w-3 sm:h-4 sm:w-4 mt-0.5 flex-shrink-0" />
                           <div className="min-w-0">
                             <div className="font-medium text-foreground truncate">
-                              {new Date(ride.departure_time).toLocaleDateString('en-IN', { 
+                              {new Date(ride.departure_time).toLocaleDateString('en-IN', {
                                 day: '2-digit',
                                 month: 'short'
                               })}
                             </div>
                             <div className="text-xs">
-                              {new Date(ride.departure_time).toLocaleTimeString('en-IN', { 
+                              {new Date(ride.departure_time).toLocaleTimeString('en-IN', {
                                 hour: '2-digit',
                                 minute: '2-digit'
                               })}
@@ -583,10 +623,8 @@ export default function RidesPage() {
                         </div>
                       </div>
 
-                      {/* Driver Info */}
                       <div className="bg-muted/50 rounded-lg p-3 space-y-2 sm:space-y-0 sm:flex sm:items-center sm:justify-between">
                         <div className="flex items-center space-x-2 sm:space-x-4">
-                          {/* Driver Rating */}
                           <div className="flex items-center space-x-1">
                             {ride.drivers.total_reviews > 0 ? (
                               <>
@@ -608,7 +646,6 @@ export default function RidesPage() {
                           </div>
                         </div>
                         
-                        {/* Phone visibility info */}
                         <div className="flex items-center space-x-2 text-xs sm:text-sm text-muted-foreground">
                           <Phone className="h-3 w-3 sm:h-4 sm:w-4" />
                           <span>
@@ -620,7 +657,6 @@ export default function RidesPage() {
                         </div>
                       </div>
 
-                      {/* Book Button */}
                       <div className="pt-2">
                         {user && isRideBooked(ride.id) ? (
                           <Badge variant="secondary" className="w-full justify-center py-2 sm:w-auto">
