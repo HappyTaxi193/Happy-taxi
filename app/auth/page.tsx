@@ -381,6 +381,15 @@ export default function AuthPage() {
                       </form>
                     ) : (
                       <form onSubmit={handleSignup} className="space-y-4">
+                        <div className="mb-4">
+                          <p className="text-sm text-muted-foreground">
+                            Please check our{" "}
+                            <a href="/driver-requirements" className="text-primary hover:underline font-medium">
+                              driver requirements
+                            </a>{" "}
+                            before you proceed.
+                          </p>
+                        </div>
                         <div>
                           <Label htmlFor="driverName">Full Name</Label>
                           <Input
