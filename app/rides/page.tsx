@@ -225,6 +225,7 @@ export default function RidesPage() {
         .eq("status", "active")
         .gt("available_seats", 0)
         .gte("departure_time", new Date().toISOString())
+        .eq("drivers.is_banned", false)
         .order("departure_time", { ascending: true })
 
       if (error) throw error
