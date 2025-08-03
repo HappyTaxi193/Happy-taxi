@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { Navbar } from "@/components/navbar"
@@ -7,7 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { AlertTriangle } from "lucide-react"
+import { AlertTriangle, User, Upload, X } from "lucide-react"
+import Image from "next/image"
 
 interface Driver {
   id: string
@@ -22,8 +23,19 @@ interface Driver {
   car_model: string
   car_make: string
   is_verified: boolean
+  is_banned: boolean
   total_earnings: number
   completed_rides: number
+}
+
+// Function to convert a File to a Base64 string
+const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.readAsDataURL(file)
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = error => reject(error)
+  })
 }
 
 export default function EditProfilePage() {
@@ -37,7 +49,10 @@ export default function EditProfilePage() {
     car_model: "",
     car_make: "",
   })
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null)
+  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -77,6 +92,9 @@ export default function EditProfilePage() {
         car_model: driverData.car_model || "",
         car_make: driverData.car_make || "",
       })
+      if (driverData.photograph_url) {
+        setProfileImageUrl(driverData.photograph_url)
+      }
     } catch (error) {
       console.error("Error fetching driver data:", error)
       alert("Failed to load profile data.")
@@ -93,12 +111,37 @@ export default function EditProfilePage() {
     }))
   }
 
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setProfileImageFile(file)
+      setProfileImageUrl(URL.createObjectURL(file))
+    }
+  }
+
+  const handleRemoveImage = () => {
+    setProfileImageFile(null)
+    setProfileImageUrl(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+  }
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!driver) return
 
     setIsSubmitting(true)
+    let newPhotographBase64 = driver.photograph_url
+
     try {
+      if (profileImageFile) {
+        newPhotographBase64 = await fileToBase64(profileImageFile)
+      } else if (profileImageUrl === null && driver.photograph_url) {
+        // User removed the image
+        newPhotographBase64 = null
+      }
+      
       const { error } = await supabase
         .from("drivers")
         .update({
@@ -108,6 +151,7 @@ export default function EditProfilePage() {
           vehicle_number: formData.vehicle_number,
           car_model: formData.car_model,
           car_make: formData.car_make,
+          photograph_url: newPhotographBase64,
         })
         .eq("id", driver.id)
 
@@ -171,6 +215,51 @@ export default function EditProfilePage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <h3 className="font-semibold text-lg">Personal Information</h3>
+                  <div>
+                    <Label htmlFor="profileImage">Profile Picture</Label>
+                    <div className="flex items-center space-x-4">
+                      <div className="relative h-24 w-24 rounded-full border border-dashed flex items-center justify-center overflow-hidden">
+                        {profileImageUrl ? (
+                          <img
+                            src={profileImageUrl}
+                            alt="Profile"
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <User className="h-12 w-12 text-gray-400" />
+                        )}
+                      </div>
+                      <div className="flex-1 space-y-2">
+                        <Label
+                          htmlFor="profileImageFile"
+                          className="flex items-center justify-center px-4 py-2 border rounded-md cursor-pointer text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-800"
+                        >
+                          <Upload className="h-4 w-4 mr-2" />
+                          {profileImageUrl ? "Change Photo" : "Upload Photo"}
+                        </Label>
+                        <Input
+                          id="profileImageFile"
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageChange}
+                          ref={fileInputRef}
+                          className="hidden"
+                        />
+                        {profileImageUrl && (
+                          <Button
+                            variant="destructive"
+                            type="button"
+                            size="sm"
+                            onClick={handleRemoveImage}
+                            className="w-full"
+                          >
+                            <X className="h-4 w-4 mr-2" />
+                            Remove Photo
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                   <div>
                     <Label htmlFor="primary_phone">Primary Phone</Label>
                     <Input
