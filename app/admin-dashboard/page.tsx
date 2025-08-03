@@ -4,9 +4,9 @@ import { supabase } from "@/lib/supabase"
 import { useEffect, useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Users, Car, CheckCircle, Clock, Ban, XCircle } from "lucide-react"
+import { Users, Car, CheckCircle, Clock, Ban, XCircle, DollarSign } from "lucide-react"
 import { Navbar } from "@/components/navbar"
-import { Button } from "@/components/ui/button" // Correct import
+import { Button } from "@/components/ui/button"
 
 interface Driver {
   id: string
@@ -23,6 +23,8 @@ interface User {
 interface Ride {
   id: string
   is_ride_completed: boolean | null;
+  price: number;
+  created_at: string;
 }
 
 export default function AdminDashboardPage() {
@@ -31,6 +33,8 @@ export default function AdminDashboardPage() {
   const [drivers, setDrivers] = useState<Driver[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [rides, setRides] = useState<Ride[]>([])
+  const [totalRevenue, setTotalRevenue] = useState<number>(0);
+  const [monthlyRevenue, setMonthlyRevenue] = useState<number>(0);
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -66,12 +70,29 @@ export default function AdminDashboardPage() {
 
       const { data: ridesData, error: ridesError } = await supabase
         .from("rides")
-        .select(`id, is_ride_completed`)
+        .select(`id, is_ride_completed, price, created_at`)
       if (ridesError) throw ridesError
 
       setDrivers(driversData || [])
       setUsers(usersData || [])
       setRides(ridesData || [])
+
+      // Calculate Revenue
+      const totalRev = ridesData?.reduce((acc, ride) => acc + (ride.price || 0), 0) || 0;
+      setTotalRevenue(totalRev);
+
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+
+      const monthlyRev = ridesData
+        ?.filter(ride => {
+          const rideDate = new Date(ride.created_at);
+          return rideDate.getMonth() === currentMonth && rideDate.getFullYear() === currentYear;
+        })
+        .reduce((acc, ride) => acc + (ride.price || 0), 0) || 0;
+      setMonthlyRevenue(monthlyRev);
+
     } catch (error) {
       console.error("Error fetching stats data:", error)
       alert("Failed to load dashboard stats.")
@@ -162,6 +183,11 @@ export default function AdminDashboardPage() {
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+              {/* Revenue Stats */}
+              <StatCard title="Total Revenue" value={`₹${totalRevenue.toLocaleString()}`} icon={DollarSign} color="text-green-600" />
+              <StatCard title="Monthly Revenue" value={`₹${monthlyRevenue.toLocaleString()}`} icon={DollarSign} color="text-green-600" />
+              
+              {/* Other Stats */}
               <StatCard title="Total Users" value={overallStats.totalUsers} icon={Users} />
               <StatCard title="Active Users" value={overallStats.activeUsers} icon={Users} color="text-green-600" />
               <StatCard title="Banned Users" value={overallStats.bannedUsers} icon={Users} color="text-red-600" />
