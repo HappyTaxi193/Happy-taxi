@@ -29,6 +29,7 @@ interface Driver {
   is_banned?: boolean
   total_earnings?: number
   completed_rides?: number
+  name: string // Added driver name
   users: { phone: string; role: string }
 }
 
@@ -464,8 +465,8 @@ export default function EnhancedAdminDashboard() {
                       className="w-20 h-20 rounded-full object-cover border"
                     />
                     <div>
-                      <h3 className="font-semibold text-lg">{driver.car_make} {driver.car_model}</h3>
-                      <p className="text-muted-foreground">{driver.vehicle_number}</p>
+                      <h3 className="font-semibold text-lg">{driver.name}</h3> {/* Added driver name here */}
+                      <p className="text-muted-foreground">{driver.car_make} {driver.car_model} ({driver.vehicle_number})</p>
                     </div>
                   </div>
 
