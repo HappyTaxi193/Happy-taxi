@@ -29,6 +29,7 @@ interface Driver {
   vehicle_number: string;
   rating: number;
   total_reviews: number;
+  is_banned: boolean; // Add this property to the interface
 }
 
 interface Ride {
@@ -191,20 +192,23 @@ export default function RidesPage() {
             secondary_phone,
             car_make,
             car_model,
-            vehicle_number
+            vehicle_number,
+            is_banned
           )
         `
         )
         .eq('status', 'active')
         .gt('available_seats', 0)
         .gte('departure_time', new Date().toISOString())
-        .eq('drivers.is_banned', false)
         .order('departure_time', { ascending: true });
 
       if (error) throw error;
 
+      // Filter out rides without a driver and rides from banned drivers
+      const validRides = (ridesData || []).filter(ride => ride.drivers && !ride.drivers.is_banned);
+
       const ridesWithRatings = await Promise.all(
-        (ridesData || []).map(async (ride) => {
+        validRides.map(async (ride) => {
           const driverRating = await calculateDriverRating(ride.drivers.id);
           return {
             ...ride,
