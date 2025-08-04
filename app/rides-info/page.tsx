@@ -139,7 +139,7 @@ export default function RidesInfoPage() {
               <div>
                 <p><strong>Price:</strong> ₹{ride.price.toLocaleString()}</p>
                 <p><strong>Seats:</strong> {ride.available_seats}/{ride.total_seats} available</p>
-                <p><strong>Fee Status:</strong> {ride.fee_status}</p>
+                
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
