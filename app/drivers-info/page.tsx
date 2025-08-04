@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { CheckCircle, XCircle, Ban, Eye, Clock } from "lucide-react"
 import { Navbar } from "@/components/navbar"
 
-const PAGE_LIMIT = 20;
+const PAGE_LIMIT = 5;
 
 interface Driver {
   id: string
@@ -37,35 +37,62 @@ interface Driver {
   users: { phone: string; role: string }
 }
 
+interface PaginationState {
+  pending: { drivers: Driver[]; page: number; hasMore: boolean; loading: boolean };
+  verified: { drivers: Driver[]; page: number; hasMore: boolean; loading: boolean };
+  banned: { drivers: Driver[]; page: number; hasMore: boolean; loading: boolean };
+}
+
 export default function DriversInfoPage() {
   const router = useRouter();
-  const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [page, setPage] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
-  const [loading, setLoading] = useState(false);
+  const [paginationState, setPaginationState] = useState<PaginationState>({
+    pending: { drivers: [], page: 0, hasMore: true, loading: false },
+    verified: { drivers: [], page: 0, hasMore: true, loading: false },
+    banned: { drivers: [], page: 0, hasMore: true, loading: false }
+  });
   const [error, setError] = useState<string | null>(null);
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState<'pending' | 'verified' | 'banned'>('pending');
 
-  const fetchDrivers = useCallback(async (page: number) => {
-    if (loading || !hasMore) return;
+  const fetchDrivers = useCallback(async (tab: 'pending' | 'verified' | 'banned', page: number) => {
+    const currentState = paginationState[tab];
+    if (currentState.loading || !currentState.hasMore) return;
 
-    setLoading(true);
+    setPaginationState(prev => ({
+      ...prev,
+      [tab]: { ...prev[tab], loading: true }
+    }));
     setError(null);
+
     try {
       const start = page * PAGE_LIMIT;
-      const { data: driversData, error: driversError } = await supabase
+      
+      // Build query based on tab
+      let query = supabase
         .from("drivers")
         .select(`*, users (phone, role)`)
         .order("created_at", { ascending: false })
         .range(start, start + PAGE_LIMIT - 1);
 
+      // Add filters based on tab
+      switch (tab) {
+        case 'pending':
+          query = query.eq('is_verified', false);
+          break;
+        case 'verified':
+          query = query.eq('is_verified', true).eq('is_banned', false);
+          break;
+        case 'banned':
+          query = query.eq('is_banned', true);
+          break;
+      }
+
+      const { data: driversData, error: driversError } = await query;
+
       if (driversError) throw driversError;
 
-      if (!driversData || driversData.length < PAGE_LIMIT) {
-        setHasMore(false);
-      }
-      
       const newDrivers = (driversData as Driver[]) || [];
+      const hasMore = newDrivers.length === PAGE_LIMIT;
       
       // Fetch ratings for each driver
       const driversWithRatings = await Promise.all(
@@ -106,20 +133,33 @@ export default function DriversInfoPage() {
         })
       );
       
-      setDrivers(prev => page === 0 ? driversWithRatings : [...prev, ...driversWithRatings]);
-      setPage(page + 1);
+      setPaginationState(prev => ({
+        ...prev,
+        [tab]: {
+          drivers: page === 0 ? driversWithRatings : [...prev[tab].drivers, ...driversWithRatings],
+          page: page + 1,
+          hasMore,
+          loading: false
+        }
+      }));
 
     } catch (error) {
       console.error("Error fetching drivers:", error);
       setError("Failed to load drivers. Check your database connection.");
-    } finally {
-      setLoading(false);
+      setPaginationState(prev => ({
+        ...prev,
+        [tab]: { ...prev[tab], loading: false }
+      }));
     }
-  }, [loading, hasMore]);
+  }, [paginationState]);
 
+  // Initialize data for the active tab
   useEffect(() => {
-    fetchDrivers(0);
-  }, [fetchDrivers]);
+    const currentState = paginationState[activeTab];
+    if (currentState.drivers.length === 0 && !currentState.loading) {
+      fetchDrivers(activeTab, 0);
+    }
+  }, [activeTab, fetchDrivers, paginationState]);
 
   const handleDriverAction = async (driverId: string, action: string) => {
     if (processingIds.has(driverId)) return;
@@ -152,10 +192,15 @@ export default function DriversInfoPage() {
       }
 
       if (success) {
-        setPage(0);
-        setHasMore(true);
-        setDrivers([]);
-        fetchDrivers(0);
+        // Reset all pagination states since driver status changed
+        setPaginationState({
+          pending: { drivers: [], page: 0, hasMore: true, loading: false },
+          verified: { drivers: [], page: 0, hasMore: true, loading: false },
+          banned: { drivers: [], page: 0, hasMore: true, loading: false }
+        });
+        
+        // Refetch current tab data
+        fetchDrivers(activeTab, 0);
         alert(`Driver ${action}ed successfully!`);
       }
     } catch (error) {
@@ -263,9 +308,44 @@ export default function DriversInfoPage() {
     </div>
   )
 
-  const pendingDrivers = useMemo(() => drivers.filter(d => !d.is_verified).length, [drivers]);
-  const verifiedDrivers = useMemo(() => drivers.filter(d => d.is_verified && !d.is_banned).length, [drivers]);
-  const bannedDrivers = useMemo(() => drivers.filter(d => d.is_banned).length, [drivers]);
+  const renderTabContent = (tab: 'pending' | 'verified' | 'banned') => {
+    const currentState = paginationState[tab];
+    const { drivers, loading, hasMore, page } = currentState;
+
+    if (loading && drivers.length === 0) {
+      return <div className="text-center py-8">Loading drivers...</div>;
+    }
+
+    if (drivers.length === 0) {
+      const emptyMessages = {
+        pending: "No pending approvals",
+        verified: "No verified drivers",
+        banned: "No banned drivers"
+      };
+      return <div className="text-center py-8 text-muted-foreground">{emptyMessages[tab]}</div>;
+    }
+
+    return (
+      <>
+        <div className="space-y-4">
+          {drivers.map(driver => (
+            <DriverCard key={driver.id} driver={driver} />
+          ))}
+        </div>
+        {hasMore && (
+          <div className="flex justify-center mt-6">
+            <Button 
+              onClick={() => fetchDrivers(tab, page)} 
+              disabled={loading}
+              variant="outline"
+            >
+              {loading ? 'Loading...' : 'Load More'}
+            </Button>
+          </div>
+        )}
+      </>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -291,35 +371,29 @@ export default function DriversInfoPage() {
             {error ? (
               <div className="text-center py-8 text-red-500">{error}</div>
             ) : (
-              <Tabs defaultValue="pending">
+              <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
                 <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="pending">Pending ({pendingDrivers})</TabsTrigger>
-                  <TabsTrigger value="verified">Verified ({verifiedDrivers})</TabsTrigger>
-                  <TabsTrigger value="banned">Banned ({bannedDrivers})</TabsTrigger>
+                  <TabsTrigger value="pending">
+                    Pending ({paginationState.pending.drivers.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="verified">
+                    Verified ({paginationState.verified.drivers.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="banned">
+                    Banned ({paginationState.banned.drivers.length})
+                  </TabsTrigger>
                 </TabsList>
-                <TabsContent value="pending" className="space-y-4 mt-6">
-                  {loading && page === 0 ? (<div className="text-center py-8">Loading drivers...</div>) : drivers.filter(d => !d.is_verified).length === 0 ? (<div className="text-center py-8 text-muted-foreground">No pending approvals</div>) : (
-                    <>
-                      {drivers.filter(d => !d.is_verified).map(driver => (<DriverCard key={driver.id} driver={driver} />))}
-                      {hasMore && (<div className="flex justify-center mt-4"><Button onClick={() => fetchDrivers(page)} disabled={loading}>{loading ? 'Loading...' : 'Load More'}</Button></div>)}
-                    </>
-                  )}
+                
+                <TabsContent value="pending" className="mt-6">
+                  {renderTabContent('pending')}
                 </TabsContent>
-                <TabsContent value="verified" className="space-y-4 mt-6">
-                  {loading && page === 0 ? (<div className="text-center py-8">Loading drivers...</div>) : drivers.filter(d => d.is_verified && !d.is_banned).length === 0 ? (<div className="text-center py-8 text-muted-foreground">No verified drivers</div>) : (
-                    <>
-                      {drivers.filter(d => d.is_verified && !d.is_banned).map(driver => (<DriverCard key={driver.id} driver={driver} />))}
-                      {hasMore && (<div className="flex justify-center mt-4"><Button onClick={() => fetchDrivers(page)} disabled={loading}>{loading ? 'Loading...' : 'Load More'}</Button></div>)}
-                    </>
-                  )}
+                
+                <TabsContent value="verified" className="mt-6">
+                  {renderTabContent('verified')}
                 </TabsContent>
-                <TabsContent value="banned" className="space-y-4 mt-6">
-                  {loading && page === 0 ? (<div className="text-center py-8">Loading drivers...</div>) : drivers.filter(d => d.is_banned).length === 0 ? (<div className="text-center py-8 text-muted-foreground">No banned drivers</div>) : (
-                    <>
-                      {drivers.filter(d => d.is_banned).map(driver => (<DriverCard key={driver.id} driver={driver} />))}
-                      {hasMore && (<div className="flex justify-center mt-4"><Button onClick={() => fetchDrivers(page)} disabled={loading}>{loading ? 'Loading...' : 'Load More'}</Button></div>)}
-                    </>
-                  )}
+                
+                <TabsContent value="banned" className="mt-6">
+                  {renderTabContent('banned')}
                 </TabsContent>
               </Tabs>
             )}
