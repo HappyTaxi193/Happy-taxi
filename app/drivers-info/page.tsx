@@ -28,12 +28,12 @@ interface Driver {
   is_verified: boolean
   created_at: string
   updated_at: string
-  rating?: number | null // Make rating and total_reviews optional
+  rating?: number | null
   total_reviews?: number | null
   is_banned?: boolean
   total_earnings?: number
   completed_rides?: number
-  name?: string // Make name optional
+  name?: string
   users: { phone: string; role: string }
 }
 
@@ -66,7 +66,47 @@ export default function DriversInfoPage() {
       }
       
       const newDrivers = (driversData as Driver[]) || [];
-      setDrivers(prev => page === 0 ? newDrivers : [...prev, ...newDrivers]);
+      
+      // Fetch ratings for each driver
+      const driversWithRatings = await Promise.all(
+        newDrivers.map(async (driver) => {
+          try {
+            // Get all reviews for this driver through the bookings and rides tables
+            const { data: reviewsData, error: reviewsError } = await supabase
+              .from("reviews")
+              .select(`
+                rating,
+                bookings!inner(
+                  ride_id,
+                  rides!inner(
+                    driver_id
+                  )
+                )
+              `)
+              .eq("bookings.rides.driver_id", driver.id);
+
+            if (reviewsError) {
+              console.error("Error fetching reviews for driver:", driver.id, reviewsError);
+              return { ...driver, rating: null, total_reviews: 0 };
+            }
+
+            const ratings = reviewsData?.map(review => review.rating).filter(rating => rating !== null) || [];
+            const totalReviews = ratings.length;
+            const averageRating = totalReviews > 0 ? ratings.reduce((sum, rating) => sum + rating, 0) / totalReviews : null;
+
+            return {
+              ...driver,
+              rating: averageRating,
+              total_reviews: totalReviews
+            };
+          } catch (error) {
+            console.error("Error calculating rating for driver:", driver.id, error);
+            return { ...driver, rating: null, total_reviews: 0 };
+          }
+        })
+      );
+      
+      setDrivers(prev => page === 0 ? driversWithRatings : [...prev, ...driversWithRatings]);
       setPage(page + 1);
 
     } catch (error) {
@@ -155,8 +195,7 @@ export default function DriversInfoPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm mb-4">
             <div>
               <p><strong>Phone:</strong> {driver.primary_phone}</p>
-              {/* Corrected line to handle potential null/undefined rating */}
-              <p><strong>Rating:</strong> {driver.rating?.toFixed(1) ?? 'N/A'}/5 ({driver.total_reviews ?? 0} reviews)</p>
+              <p><strong>Rating:</strong> {driver.rating ? driver.rating.toFixed(1) : 'N/A'}/5 ({driver.total_reviews || 0} reviews)</p>
             </div>
             <div>
               <p><strong>Earnings:</strong> ₹{driver.total_earnings?.toLocaleString() || 0}</p>
@@ -189,7 +228,6 @@ export default function DriversInfoPage() {
                   <div className="flex items-center gap-4">
                     <img src={driver.photograph_url} alt="Driver" className="w-20 h-20 rounded-full object-cover border" />
                     <div>
-                      {/* Corrected line to handle potential null/undefined name */}
                       <h3 className="font-semibold text-lg">{driver.name ?? 'N/A'}</h3>
                       <p className="text-muted-foreground">{driver.car_make} {driver.car_model} ({driver.vehicle_number})</p>
                     </div>
@@ -204,10 +242,8 @@ export default function DriversInfoPage() {
                     </div>
                     <div>
                       <h4 className="font-semibold mb-2">Performance Stats</h4>
-                      {/* Corrected line to handle potential null/undefined rating */}
-                      <p><strong>Rating:</strong> {driver.rating?.toFixed(1) ?? 'N/A'}/5</p>
-                      {/* Corrected line to handle potential null/undefined total_reviews */}
-                      <p><strong>Total Reviews:</strong> {driver.total_reviews ?? 0}</p>
+                      <p><strong>Rating:</strong> {driver.rating ? driver.rating.toFixed(1) : 'N/A'}/5</p>
+                      <p><strong>Total Reviews:</strong> {driver.total_reviews || 0}</p>
                       <p><strong>Total Earnings:</strong> ₹{driver.total_earnings?.toLocaleString() || 0}</p>
                       <p><strong>Completed Rides:</strong> {driver.completed_rides || 0}</p>
                       <p><strong>Joined:</strong> {new Date(driver.created_at).toLocaleDateString()}</p>
